@@ -5,21 +5,24 @@
 #include "uart.h"
 #include <util/delay.h>
 
+
+// Volatile, declared here because they're used in and out of the ISR
 volatile uint8_t rcv_byte = 0;
 volatile uint8_t rcv_bitcount = 0;
 volatile uint8_t send_bitcount = 0;
 volatile uint8_t scancode = 0;
 volatile uint8_t strobe = 0 ;
 volatile uint8_t ssp = 0; // 0 = Start/ 1 = stop/ 2 = parity
-volatile uint8_t sr = 0; // 0 = Receive, 1 = Send
-volatile uint8_t send_parity;
-volatile uint8_t send_byte;
-volatile uint8_t parity_errors = 0;
+volatile uint8_t sr = 0; // 0 = 0 - Receive, 0 = 1 = Send
+volatile uint8_t send_parity = 0; 
+volatile uint8_t send_byte = 0;
+volatile uint8_t parity_errors = 0; // Currently unused but will provide error info to host computer
 volatile uint8_t framing_errors = 0;
 
 
 int calc_parity(unsigned parity_x) 
 {
+	// Calculate Odd-Parity of byte needed to send PS/2 Packet
 	unsigned parity_y;
 	parity_y = parity_x ^ (parity_x >> 1);
     parity_y = parity_y ^ (parity_y >> 2);
@@ -65,7 +68,7 @@ void sendps2(uint8_t data, uint8_t responseneeded)
 		while (strobe == 0) {} // Wait for ACK packet before proceeding
 		strobe = 0;
 		send_tries--;
-	}	while ((send_tries) && (scancode != 0xFA));
+	}	while ((send_tries) && (scancode != 0xFA)); // If the response is not an ack, resend up to 3 times.
 
 	if (responseneeded) // Are we expecting a response besides ACK?
 	{
