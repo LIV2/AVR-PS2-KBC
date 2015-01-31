@@ -175,8 +175,8 @@ ISR (INT0_vect)
 
 
 int main (void) {
-	volatile uint8_t kbd_curr_cmd = 0; // 0 = keyup | 1 = shift | 2 = ctrl | 3 = alt | 4 = capslock | 5 = numlock | 6 = scroll lock
-	volatile char retchar = 0;
+	volatile uint8_t kb_register = 0; // 0 = keyup | 1 = shift | 2 = ctrl | 3 = alt | 4 = capslock | 5 = numlock | 6 = scroll lock
+	volatile char ret_char = 0;
 	DDRD &= ~(1 << DDD2 | 1 << DDD3);
 	EICRA |= (1 << ISC01);
 	EIMSK |= (1 << INT0);
@@ -195,24 +195,24 @@ int main (void) {
 	while (1) {
 		if (strobe)
 		{
-			if (kbd_curr_cmd & (1 << KB_KUP)) //This is a keyup event
+			if (kb_register & (1 << KB_KUP)) //This is a keyup event
 			{
 				switch(scancode)
 				{
 					case 0x12:
 					case 0x59:
-						kbd_curr_cmd &= ~(1 << KB_SHIFT);
+						kb_register &= ~(1 << KB_SHIFT);
 						break;
 					case 0x14:
-						kbd_curr_cmd &= ~(1 << KB_CTRL);
+						kb_register &= ~(1 << KB_CTRL);
 						break;
 					case 0x11:
-						kbd_curr_cmd &= ~(1 << KB_ALT);
+						kb_register &= ~(1 << KB_ALT);
 						break;
 					default:
 						break;
 				}
-				kbd_curr_cmd &= ~(1 << KB_KUP);
+				kb_register &= ~(1 << KB_KUP);
 
 			}
 			else 
@@ -220,67 +220,67 @@ int main (void) {
 				switch(scancode)
 				{
 					case 0xF0: //Key up
-						kbd_curr_cmd |= (1 << KB_KUP);
+						kb_register |= (1 << KB_KUP);
 						break;
 					case 0xE0: //Extended key
-						kbd_curr_cmd |= (1 << KB_EXT);
+						kb_register |= (1 << KB_EXT);
 						break;
 					case 0x12:
 					case 0x59: // Shift
-						kbd_curr_cmd |= (1 << KB_SHIFT);
+						kb_register |= (1 << KB_SHIFT);
 						break;
 					case 0x66: //backspace
-						retchar = '\b';
+						ret_char = '\b';
 						break;
 					case 0x5A: //enter
-						retchar = '\r\n';
+						ret_char = '\r\n';
 						break;
 					case 0x0D: //tab
-						retchar = '\t';
+						ret_char = '\t';
 						break;
 					case 0x14: //ctrl
-						kbd_curr_cmd |= (1 << KB_CTRL);
+						kb_register |= (1 << KB_CTRL);
 						break;
 					case 0x11: //alt
-						kbd_curr_cmd |= (1 << KB_ALT);
+						kb_register |= (1 << KB_ALT);
 						break;
 					case 0x76: //esc
-						retchar = '\e';
+						ret_char = '\e';
 						break;
 					case 0x58: //capslock
-						kbd_curr_cmd ^= (1 << KB_CAPSLK);
+						kb_register ^= (1 << KB_CAPSLK);
 						sendps2(0xed,0);
-						sendps2((kbd_curr_cmd >> 4),0); // Set KBD Lights
+						sendps2((kb_register >> 4),0); // Set KBD Lights
 						break;
 					case 0x77: //numlock
-						kbd_curr_cmd ^= (1 << KB_NUMLK);
+						kb_register ^= (1 << KB_NUMLK);
 						sendps2(0xed,0);
-						sendps2((kbd_curr_cmd >> 4),0); // Set KBD Lights
+						sendps2((kb_register >> 4),0); // Set KBD Lights
 						break;
 					case 0x7E: //scrllock
-						kbd_curr_cmd ^= (1 << KB_SCRLK);
+						kb_register ^= (1 << KB_SCRLK);
 						sendps2(0xed,0);
-						sendps2((kbd_curr_cmd >> 4),0); // Set KBD Lights
+						sendps2((kb_register >> 4),0); // Set KBD Lights
 						break;
 					default: // Fall through for Alphanumeric Characters
-						if (kbd_curr_cmd & (1 << KB_CTRL)) // ASCII Control Code 
+						if (kb_register & (1 << KB_CTRL)) // ASCII Control Code 
 						{
-							retchar = (ps2_to_ascii_shifted[scancode] - 0x40); // Send Ascii control code, i.e CTRL+g = Ascii Bell 0x07 
+							ret_char = (ps2_to_ascii_shifted[scancode] - 0x40); // Send Ascii control code, i.e CTRL+g = Ascii Bell 0x07 
 						}
-						else if ((kbd_curr_cmd & (1<< KB_SHIFT)) | (kbd_curr_cmd & (1 <<KB_CAPSLK))) {
-							retchar	= ps2_to_ascii_shifted[scancode]; 
+						else if ((kb_register & (1<< KB_SHIFT)) | (kb_register & (1 <<KB_CAPSLK))) {
+							ret_char = ps2_to_ascii_shifted[scancode]; 
 						}
 						else
 						{
-							retchar	= ps2_to_ascii[scancode];
+							ret_char = ps2_to_ascii[scancode];
 						}
 						break;
 
 
-					if (retchar)
+					if (ret_char)
 					{
-						printf("%c", retchar);
-						retchar = 0;
+						printf("%c", ret_char);
+						ret_char = 0;
 					}
 				}				
 			}
