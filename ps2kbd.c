@@ -211,6 +211,8 @@ sendps2(0x02,0); // Codeset 2
 			}
 			strobe = 0;
 */
+
+
 			if (kbd_curr_cmd & (1 << KB_KUP)) //This is a keyup event
 			{
 				switch(scancode)
@@ -238,7 +240,7 @@ sendps2(0x02,0); // Codeset 2
 						kbd_curr_cmd |= (1 << KB_KUP);
 						break;
 					case 0xE0: //Extended key
-						// Do something?
+						kbd_curr_cmd |= (1 << KB_EXT);
 						break;
 					case 0x12 | 0x59: // Shift
 						kbd_curr_cmd |= (1 << KB_SHIFT);
@@ -273,6 +275,7 @@ sendps2(0x02,0); // Codeset 2
 						sendps2((kbd_curr_cmd >> 4),0); // Set KBD Lights
 						break;
 					default:
+						printf("char %c \r\n", ps2_to_ascii[scancode]);s
 						break;
 				}				
 			}
