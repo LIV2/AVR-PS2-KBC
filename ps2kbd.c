@@ -19,6 +19,7 @@ volatile uint8_t send_byte;
 volatile uint8_t parity_errors = 0;
 volatile uint8_t framing_errors = 0;
 
+
 int calc_parity(unsigned parity_x) 
 {
 	unsigned parity_y;
