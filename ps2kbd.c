@@ -276,7 +276,6 @@ sendps2(0x02,0); // Codeset 2
 						break;
 				}				
 			}
-		
 			strobe = 0;
 		}
 	}
