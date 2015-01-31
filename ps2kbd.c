@@ -236,7 +236,7 @@ int main (void) {
 						ret_char = '\b';
 						break;
 					case 0x5A: //enter
-						ret_char = '\r\n';
+						ret_char = '\r';
 						break;
 					case 0x0D: //tab
 						ret_char = '\t';
