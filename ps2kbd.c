@@ -230,11 +230,13 @@ int main (void) {
 						kbd_curr_cmd |= (1 << KB_SHIFT);
 						break;
 					case 0x66: //backspace
+						retchar = '\b';
 						break;
 					case 0x5A: //enter
-						printf("\r\n");
+						retchar = '\r\n';
 						break;
 					case 0x0D: //tab
+						retchar = '\t';
 						break;
 					case 0x14: //ctrl
 						kbd_curr_cmd |= (1 << KB_CTRL);
@@ -243,6 +245,7 @@ int main (void) {
 						kbd_curr_cmd |= (1 << KB_ALT);
 						break;
 					case 0x76: //esc
+						retchar = '\e';
 						break;
 					case 0x58: //capslock
 						kbd_curr_cmd ^= (1 << KB_CAPSLK);
@@ -259,16 +262,26 @@ int main (void) {
 						sendps2(0xed,0);
 						sendps2((kbd_curr_cmd >> 4),0); // Set KBD Lights
 						break;
-					default:
-						retchar = ps2_to_ascii[scancode];
-						if (((kbd_curr_cmd & (1<< KB_SHIFT)) | (kbd_curr_cmd & (1 <<KB_CAPSLK))) &&  ((retchar >=0x61) && (retchar <= 0x7A))) {
-							printf("%c", (retchar - 0x20));
+					default: // Fall through for Alphanumeric Characters
+						if (kbd_curr_cmd & (1 << KB_CTRL)) // ASCII Control Code 
+						{
+							retchar = (ps2_to_ascii_shifted[scancode] - 0x40); // Send Ascii control code, i.e CTRL+g = Ascii Bell 0x07 
+						}
+						else if ((kbd_curr_cmd & (1<< KB_SHIFT)) | (kbd_curr_cmd & (1 <<KB_CAPSLK))) {
+							retchar	= ps2_to_ascii_shifted[scancode]; 
 						}
 						else
 						{
-							printf("%c", retchar);
+							retchar	= ps2_to_ascii[scancode];
 						}
 						break;
+
+
+					if (retchar)
+					{
+						printf("%c", retchar);
+						retchar = 0;
+					}
 				}				
 			}
 			strobe = 0;
