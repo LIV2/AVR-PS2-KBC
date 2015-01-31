@@ -83,112 +83,113 @@ void parity_error(void)
 
 ISR (INT0_vect)
 {
-if (sr == 1) { //Send bytes to device.
-	if (send_bitcount >=0 && send_bitcount <=7)
-	{
-		if ((send_byte >> send_bitcount) & 1) {
+	if (sr == 1) { //Send bytes to device.
+		if (send_bitcount >=0 && send_bitcount <=7)
+		{
+			if ((send_byte >> send_bitcount) & 1) {
+				PORTD |= (1 << PD3);
+			}
+			else
+			{
+				PORTD &= ~(1 << PD3);
+			}
+		}
+		else if (send_bitcount == 8)
+		{	
+			if (send_parity)
+			{
+				PORTD &= ~(1 << PD3);
+			}
+			else
+			{
+				PORTD |= (1 << PD3);
+			}
+		}
+		else if (send_bitcount == 9)
+		{
 			PORTD |= (1 << PD3);
+		}
+		if (send_bitcount < 10)
+		{
+			send_bitcount++;
 		}
 		else
 		{
-			PORTD &= ~(1 << PD3);
+			send_bitcount = 0;
+			sr = 0;
 		}
 	}
-	else if (send_bitcount == 8)
-	{	
-		if (send_parity)
-		{
-			PORTD &= ~(1 << PD3);
-		}
-		else
-		{
-			PORTD |= (1 << PD3);
-		}
-	}
-	else if (send_bitcount == 9)
-	{
-		PORTD |= (1 << PD3);
-	}
-	if (send_bitcount < 10)
-	{
-		send_bitcount++;
-	}
-	else
-	{
-		send_bitcount = 0;
-		sr = 0;
-	}
-}
 
-else { // Receive from device
-uint8_t result = 0;
+	else { // Receive from device
+	uint8_t result = 0;
 
-	if (PIND & (1 << PD3)) 
-	{
-		result = 1;
-	}
-	else {
-		result = 0;
-	}
-if (rcv_bitcount <=9) 
-{
-	if (rcv_bitcount >=1 && rcv_bitcount <= 8) 
-	{
-		rcv_byte |= (result << (rcv_bitcount - 1));
-	}
-	else if (rcv_bitcount == 0)
-	{
-		ssp = result; // Start Bit
-	}
-	else if (rcv_bitcount == 9)
-	{
-		ssp |= (result << 2); // Parity Bit
-	}
-	rcv_bitcount++;
-}
-	else if (rcv_bitcount >= 10) 
-	{
-		ssp |= (result << 1); // Stop Bit
-		if ((ssp & 0x2) != 0x02) // Check start and stop bits.
+		if (PIND & (1 << PD3)) 
 		{
-			framing_error(ssp);
-		} 
-		else if (calc_parity(rcv_byte) == (ssp >> 2))
-		{
-			parity_error();
-			strobe = 0;
+			result = 1;
 		}
-		else 
-		{
-			scancode = rcv_byte;
-			strobe = 1;
+		else {
+			result = 0;
 		}
-		rcv_bitcount = 0;
-		rcv_byte = 0;
-		result = 0;
-	} 
+		
+		if (rcv_bitcount <=9) 
+		{
+			if (rcv_bitcount >=1 && rcv_bitcount <= 8) 
+			{
+				rcv_byte |= (result << (rcv_bitcount - 1));
+			}
+			else if (rcv_bitcount == 0)
+			{
+				ssp = result; // Start Bit
+			}
+			else if (rcv_bitcount == 9)
+			{
+				ssp |= (result << 2); // Parity Bit
+			}
+			rcv_bitcount++;
+		}
+		else if (rcv_bitcount >= 10) 
+		{
+			ssp |= (result << 1); // Stop Bit
+			if ((ssp & 0x2) != 0x02) // Check start and stop bits.
+			{
+				framing_error(ssp);
+			} 
+			else if (calc_parity(rcv_byte) == (ssp >> 2))
+			{
+				parity_error();
+				strobe = 0;
+			}
+			else 
+			{
+				scancode = rcv_byte;
+				strobe = 1;
+			}
+			rcv_bitcount = 0;
+			rcv_byte = 0;
+			result = 0;
+		}
 
-}
+	}
 
 }
 
 
 int main (void) {
-volatile uint8_t kbd_curr_cmd = 0; // 0 = keyup | 1 = shift | 2 = ctrl | 3 = alt | 4 = capslock | 5 = numlock | 6 = scroll lock
-DDRD &= ~(1 << DDD2 | 1 << DDD3);
-EICRA |= (1 << ISC01);
-EIMSK |= (1 << INT0);
-uart_init();
-stdout = &uart_output;
-stdin  = &uart_input;
-printf("Startup Completed. \r\n");
+	volatile uint8_t kbd_curr_cmd = 0; // 0 = keyup | 1 = shift | 2 = ctrl | 3 = alt | 4 = capslock | 5 = numlock | 6 = scroll lock
+	DDRD &= ~(1 << DDD2 | 1 << DDD3);
+	EICRA |= (1 << ISC01);
+	EIMSK |= (1 << INT0);
+	uart_init();
+	stdout = &uart_output;
+	stdin  = &uart_input;
+	printf("Startup Completed. \r\n");
 
-sei();
-sendps2(0xff,1); // reset kbd
-printf("Keyboard Self-test completed: 0x%x\r\n", scancode);
-sendps2(0xf0,0); // Set Codeset 
-sendps2(0x02,0); // Codeset 2
-volatile	char retchar =0;
+	sei();
+	sendps2(0xff,1); // reset kbd
+	printf("Keyboard Self-test completed: 0x%x\r\n", scancode);
+	sendps2(0xf0,0); // Set Codeset 
+	sendps2(0x02,0); // Codeset 2
+	volatile	char retchar =0;
 
 	while (1) {
 		if (strobe)
