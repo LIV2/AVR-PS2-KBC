@@ -217,7 +217,8 @@ sendps2(0x02,0); // Codeset 2
 			{
 				switch(scancode)
 				{
-					case 0x12 | 0x59:
+					case 0x12:
+					case 0x59:
 						kbd_curr_cmd &= ~(1 << KB_SHIFT);
 						break;
 					case 0x14:
@@ -242,7 +243,8 @@ sendps2(0x02,0); // Codeset 2
 					case 0xE0: //Extended key
 						kbd_curr_cmd |= (1 << KB_EXT);
 						break;
-					case 0x12 | 0x59: // Shift
+					case 0x12:
+					case 0x59: // Shift
 						kbd_curr_cmd |= (1 << KB_SHIFT);
 						break;
 					case 0x66: //backspace
@@ -275,7 +277,7 @@ sendps2(0x02,0); // Codeset 2
 						sendps2((kbd_curr_cmd >> 4),0); // Set KBD Lights
 						break;
 					default:
-						printf("char %c \r\n", ps2_to_ascii[scancode]);s
+						printf("char %c \r\n", ps2_to_ascii[scancode]);
 						break;
 				}				
 			}
