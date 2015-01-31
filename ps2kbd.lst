@@ -1,0 +1,1426 @@
+   1               		.file	"ps2kbd.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__tmp_reg__ = 0
+   6               	__zero_reg__ = 1
+   7               		.text
+   8               	.Ltext0:
+   9               		.cfi_sections	.debug_frame
+  10               	.global	calc_parity
+  12               	calc_parity:
+  13               	.LFB7:
+  14               		.file 1 "ps2kbd.c"
+   1:ps2kbd.c      **** #include <avr/io.h>
+   2:ps2kbd.c      **** #include <avr/interrupt.h>
+   3:ps2kbd.c      **** #include <stdio.h>
+   4:ps2kbd.c      **** #include "ps2kbd.h"
+   5:ps2kbd.c      **** #include "uart.h"
+   6:ps2kbd.c      **** #ifndef F_CPU
+   7:ps2kbd.c      **** #define F_CPU 16000000UL
+   8:ps2kbd.c      **** #endif
+   9:ps2kbd.c      **** #include <util/delay.h>
+  10:ps2kbd.c      **** volatile uint8_t rcv_byte = 0;
+  11:ps2kbd.c      **** volatile uint8_t rcv_bitcount = 0;
+  12:ps2kbd.c      **** volatile uint8_t send_bitcount = 0;
+  13:ps2kbd.c      **** volatile uint8_t scancode = 0;
+  14:ps2kbd.c      **** volatile uint8_t strobe = 0 ;
+  15:ps2kbd.c      **** volatile uint8_t ssp = 0; // 0 = Start/ 1 = stop/ 2 = parity
+  16:ps2kbd.c      **** volatile uint8_t sr = 0; // 0 = Receive, 1 = Send
+  17:ps2kbd.c      **** volatile uint8_t send_parity;
+  18:ps2kbd.c      **** volatile uint8_t send_byte;
+  19:ps2kbd.c      **** volatile uint8_t parity_errors = 0;
+  20:ps2kbd.c      **** volatile uint8_t framing_errors = 0;
+  21:ps2kbd.c      **** 
+  22:ps2kbd.c      **** int calc_parity(unsigned parity_x) 
+  23:ps2kbd.c      **** {
+  15               		.loc 1 23 0
+  16               		.cfi_startproc
+  17               	.LVL0:
+  18               	/* prologue: function */
+  19               	/* frame size = 0 */
+  20               	/* stack size = 0 */
+  21               	.L__stack_usage = 0
+  24:ps2kbd.c      **** 	unsigned parity_y;
+  25:ps2kbd.c      **** 	parity_y = parity_x ^ (parity_x >> 1);
+  22               		.loc 1 25 0
+  23 0000 9C01      		movw r18,r24
+  24 0002 3695      		lsr r19
+  25 0004 2795      		ror r18
+  26 0006 2827      		eor r18,r24
+  27 0008 3927      		eor r19,r25
+  28               	.LVL1:
+  26:ps2kbd.c      ****     parity_y = parity_y ^ (parity_y >> 2);
+  29               		.loc 1 26 0
+  30 000a A901      		movw r20,r18
+  31 000c 5695      		lsr r21
+  32 000e 4795      		ror r20
+  33 0010 5695      		lsr r21
+  34 0012 4795      		ror r20
+  35 0014 4227      		eor r20,r18
+  36 0016 5327      		eor r21,r19
+  37               	.LVL2:
+  27:ps2kbd.c      ****     parity_y = parity_y ^ (parity_y >> 4);
+  38               		.loc 1 27 0
+  39 0018 CA01      		movw r24,r20
+  40               	.LVL3:
+  41 001a 74E0      		ldi r23,4
+  42               		1:
+  43 001c 9695      		lsr r25
+  44 001e 8795      		ror r24
+  45 0020 7A95      		dec r23
+  46 0022 01F4      		brne 1b
+  47               	.LVL4:
+  48 0024 8427      		eor r24,r20
+  49 0026 9527      		eor r25,r21
+  50               	.LVL5:
+  28:ps2kbd.c      ****     return parity_y & 1;
+  29:ps2kbd.c      **** }
+  51               		.loc 1 29 0
+  52 0028 8170      		andi r24,1
+  53 002a 9927      		clr r25
+  54               	.LVL6:
+  55 002c 0895      		ret
+  56               		.cfi_endproc
+  57               	.LFE7:
+  59               		.section	.rodata.str1.1,"aMS",@progbits,1
+  60               	.LC0:
+  61 0000 2146 00   		.string	"!F"
+  62               		.text
+  63               	.global	framing_error
+  65               	framing_error:
+  66               	.LFB8:
+  30:ps2kbd.c      **** 
+  31:ps2kbd.c      **** void framing_error(uint8_t num)
+  32:ps2kbd.c      **** {
+  67               		.loc 1 32 0
+  68               		.cfi_startproc
+  69               	.LVL7:
+  70               	/* prologue: function */
+  71               	/* frame size = 0 */
+  72               	/* stack size = 0 */
+  73               	.L__stack_usage = 0
+  33:ps2kbd.c      **** 	// Deal with PS/2 Protocol Framing errors. delay for the rest of the packet and clear interrupts g
+  34:ps2kbd.c      **** 	printf("!F");
+  74               		.loc 1 34 0
+  75 002e 80E0      		ldi r24,lo8(.LC0)
+  76 0030 90E0      		ldi r25,hi8(.LC0)
+  77               	.LVL8:
+  78 0032 9F93      		push r25
+  79               	.LCFI0:
+  80               		.cfi_def_cfa_offset 3
+  81 0034 8F93      		push r24
+  82               	.LCFI1:
+  83               		.cfi_def_cfa_offset 4
+  84 0036 0E94 0000 		call printf
+  85               	.LVL9:
+  35:ps2kbd.c      **** 	framing_errors++;
+  86               		.loc 1 35 0
+  87 003a 8091 0000 		lds r24,framing_errors
+  88 003e 8F5F      		subi r24,lo8(-(1))
+  89 0040 8093 0000 		sts framing_errors,r24
+  36:ps2kbd.c      **** 	EIMSK &= ~(1 << INT0);
+  90               		.loc 1 36 0
+  91 0044 E898      		cbi 0x1d,0
+  92               	.LVL10:
+  93               	.LBB6:
+  94               	.LBB7:
+  95               		.file 2 "/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h"
+   1:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** /* Copyright (c) 2002, Marek Michalkiewicz
+   2:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    Copyright (c) 2004,2005,2007 Joerg Wunsch
+   3:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    Copyright (c) 2007  Florin-Viorel Petrov
+   4:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    All rights reserved.
+   5:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+   6:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    Redistribution and use in source and binary forms, with or without
+   7:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    modification, are permitted provided that the following conditions are met:
+   8:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+   9:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    * Redistributions of source code must retain the above copyright
+  10:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****      notice, this list of conditions and the following disclaimer.
+  11:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  12:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    * Redistributions in binary form must reproduce the above copyright
+  13:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****      notice, this list of conditions and the following disclaimer in
+  14:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****      the documentation and/or other materials provided with the
+  15:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****      distribution.
+  16:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  17:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    * Neither the name of the copyright holders nor the names of
+  18:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****      contributors may be used to endorse or promote products derived
+  19:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****      from this software without specific prior written permission.
+  20:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  21:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  22:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  23:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  24:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  25:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  26:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  27:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  28:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  29:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  30:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  31:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   POSSIBILITY OF SUCH DAMAGE. */
+  32:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  33:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** /* $Id$ */
+  34:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  35:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #ifndef _UTIL_DELAY_H_
+  36:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #define _UTIL_DELAY_H_ 1
+  37:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  38:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #ifndef __HAS_DELAY_CYCLES
+  39:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #define __HAS_DELAY_CYCLES 1
+  40:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #endif
+  41:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  42:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #include <inttypes.h>
+  43:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #include <util/delay_basic.h>
+  44:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #include <math.h>
+  45:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  46:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** /** \file */
+  47:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** /** \defgroup util_delay <util/delay.h>: Convenience functions for busy-wait delay loops
+  48:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     \code
+  49:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     #define F_CPU 1000000UL  // 1 MHz
+  50:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     //#define F_CPU 14.7456E6
+  51:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     #include <util/delay.h>
+  52:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     \endcode
+  53:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  54:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     \note As an alternative method, it is possible to pass the
+  55:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     F_CPU macro down to the compiler from the Makefile.
+  56:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     Obviously, in that case, no \c \#define statement should be
+  57:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     used.
+  58:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  59:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     The functions in this header file are wrappers around the basic
+  60:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     busy-wait functions from <util/delay_basic.h>.  They are meant as
+  61:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     convenience functions where actual time values can be specified
+  62:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     rather than a number of cycles to wait for.  The idea behind is
+  63:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     that compile-time constant expressions will be eliminated by
+  64:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     compiler optimization so floating-point expressions can be used
+  65:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     to calculate the number of delay cycles needed based on the CPU
+  66:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     frequency passed by the macro F_CPU.
+  67:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  68:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     \note In order for these functions to work as intended, compiler
+  69:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     optimizations <em>must</em> be enabled, and the delay time
+  70:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     <em>must</em> be an expression that is a known constant at
+  71:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     compile-time.  If these requirements are not met, the resulting
+  72:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     delay will be much longer (and basically unpredictable), and
+  73:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     applications that otherwise do not use floating-point calculations
+  74:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     will experience severe code bloat by the floating-point library
+  75:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     routines linked into the application.
+  76:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  77:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     The functions available allow the specification of microsecond, and
+  78:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     millisecond delays directly, using the application-supplied macro
+  79:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     F_CPU as the CPU clock frequency (in Hertz).
+  80:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  81:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** */
+  82:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  83:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #if !defined(__DOXYGEN__)
+  84:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** static inline void _delay_us(double __us) __attribute__((always_inline));
+  85:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** static inline void _delay_ms(double __ms) __attribute__((always_inline));
+  86:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #endif
+  87:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  88:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #ifndef F_CPU
+  89:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** /* prevent compiler error by supplying a default */
+  90:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** # warning "F_CPU not defined for <util/delay.h>"
+  91:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** # define F_CPU 1000000UL
+  92:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #endif
+  93:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  94:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #ifndef __OPTIMIZE__
+  95:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** # warning "Compiler optimizations disabled; functions from <util/delay.h> won't work as designed"
+  96:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #endif
+  97:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+  98:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #if __HAS_DELAY_CYCLES && defined(__OPTIMIZE__) && \
+  99:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   !defined(__DELAY_BACKWARD_COMPATIBLE__) &&	   \
+ 100:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   __STDC_HOSTED__
+ 101:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #  include <math.h>
+ 102:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #endif
+ 103:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 104:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** /**
+ 105:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    \ingroup util_delay
+ 106:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 107:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    Perform a delay of \c __ms milliseconds, using _delay_loop_2().
+ 108:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 109:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    The macro F_CPU is supposed to be defined to a
+ 110:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    constant defining the CPU clock frequency (in Hertz).
+ 111:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 112:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    The maximal possible delay is 262.14 ms / F_CPU in MHz.
+ 113:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 114:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    When the user request delay which exceed the maximum possible one,
+ 115:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    _delay_ms() provides a decreased resolution functionality. In this
+ 116:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    mode _delay_ms() will work with a resolution of 1/10 ms, providing
+ 117:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    delays up to 6.5535 seconds (independent from CPU frequency).  The
+ 118:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    user will not be informed about decreased resolution.
+ 119:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 120:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    If the avr-gcc toolchain has __builtin_avr_delay_cycles(unsigned long)
+ 121:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    support, maximal possible delay is 4294967.295 ms/ F_CPU in MHz. For
+ 122:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    values greater than the maximal possible delay, overflows results in
+ 123:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    no delay i.e., 0ms.
+ 124:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 125:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    Conversion of __us into clock cycles may not always result in integer.
+ 126:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    By default, the clock cycles rounded up to next integer. This ensures that
+ 127:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    the user gets atleast __us microseconds of delay.
+ 128:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 129:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    Alternatively, user can define __DELAY_ROUND_DOWN__ and __DELAY_ROUND_CLOSEST__
+ 130:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    to round down and round to closest integer.
+ 131:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 132:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    Note: The new implementation of _delay_ms(double __ms) with 
+ 133:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     __builtin_avr_delay_cycles(unsigned long) support is not backward compatible. 
+ 134:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    User can define __DELAY_BACKWARD_COMPATIBLE__ to get a backward compatible delay.
+ 135:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    Also, the backward compatible
+ 136:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    algorithm will be chosen if the code is compiled in a <em>freestanding
+ 137:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    environment</em> (GCC option \c -ffreestanding), as the math functions
+ 138:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    required for rounding are not available to the compiler then.
+ 139:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 140:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****  */
+ 141:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** void
+ 142:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** _delay_ms(double __ms)
+ 143:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** {
+ 144:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	double __tmp ; 
+ 145:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #if __HAS_DELAY_CYCLES && defined(__OPTIMIZE__) && \
+ 146:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   !defined(__DELAY_BACKWARD_COMPATIBLE__) &&	   \
+ 147:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   __STDC_HOSTED__
+ 148:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	uint32_t __ticks_dc;
+ 149:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	extern void __builtin_avr_delay_cycles(unsigned long);
+ 150:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	__tmp = ((F_CPU) / 1e3) * __ms;
+ 151:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 152:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	#if defined(__DELAY_ROUND_DOWN__)
+ 153:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)fabs(__tmp);
+ 154:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 155:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	#elif defined(__DELAY_ROUND_CLOSEST__)
+ 156:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)(fabs(__tmp)+0.5);
+ 157:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 158:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	#else
+ 159:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		//round up by default
+ 160:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)(ceil(fabs(__tmp)));
+ 161:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	#endif
+ 162:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 163:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	__builtin_avr_delay_cycles(__ticks_dc);
+  96               		.loc 2 163 0
+  97 0046 8FEF      		ldi r24,lo8(31999)
+  98 0048 9CE7      		ldi r25,hi8(31999)
+  99 004a 0197      		1: sbiw r24,1
+ 100 004c 01F4      		brne 1b
+ 101 004e 00C0      		rjmp .
+ 102 0050 0000      		nop
+ 103               	.LBE7:
+ 104               	.LBE6:
+  37:ps2kbd.c      **** 	_delay_ms(8);
+  38:ps2kbd.c      **** 	EIFR |= (1 << INTF0);	 // Clear Interrupt flag
+ 105               		.loc 1 38 0
+ 106 0052 E09A      		sbi 0x1c,0
+  39:ps2kbd.c      **** 	EIMSK |= (1 << INT0);
+ 107               		.loc 1 39 0
+ 108 0054 E89A      		sbi 0x1d,0
+ 109 0056 0F90      		pop __tmp_reg__
+ 110 0058 0F90      		pop __tmp_reg__
+ 111               	.LCFI2:
+ 112               		.cfi_def_cfa_offset 2
+ 113 005a 0895      		ret
+ 114               		.cfi_endproc
+ 115               	.LFE8:
+ 117               	.global	sendps2
+ 119               	sendps2:
+ 120               	.LFB10:
+  40:ps2kbd.c      **** }
+  41:ps2kbd.c      **** 
+  42:ps2kbd.c      **** void parity_error()
+  43:ps2kbd.c      **** {	
+  44:ps2kbd.c      **** 	parity_errors++;
+  45:ps2kbd.c      **** 	sendps2(0xFE,0); // Inform the KBD of the Parity error and request a resend.
+  46:ps2kbd.c      **** 	printf("!P");
+  47:ps2kbd.c      **** }
+  48:ps2kbd.c      **** 
+  49:ps2kbd.c      **** void sendps2(uint8_t data, uint8_t responseneeded)
+  50:ps2kbd.c      **** {
+ 121               		.loc 1 50 0
+ 122               		.cfi_startproc
+ 123               	.LVL11:
+ 124 005c FF92      		push r15
+ 125               	.LCFI3:
+ 126               		.cfi_def_cfa_offset 3
+ 127               		.cfi_offset 15, -2
+ 128 005e 0F93      		push r16
+ 129               	.LCFI4:
+ 130               		.cfi_def_cfa_offset 4
+ 131               		.cfi_offset 16, -3
+ 132 0060 1F93      		push r17
+ 133               	.LCFI5:
+ 134               		.cfi_def_cfa_offset 5
+ 135               		.cfi_offset 17, -4
+ 136 0062 CF93      		push r28
+ 137               	.LCFI6:
+ 138               		.cfi_def_cfa_offset 6
+ 139               		.cfi_offset 28, -5
+ 140 0064 DF93      		push r29
+ 141               	.LCFI7:
+ 142               		.cfi_def_cfa_offset 7
+ 143               		.cfi_offset 29, -6
+ 144 0066 1F92      		push __zero_reg__
+ 145               	.LCFI8:
+ 146               		.cfi_def_cfa_offset 8
+ 147 0068 CDB7      		in r28,__SP_L__
+ 148 006a DEB7      		in r29,__SP_H__
+ 149               	.LCFI9:
+ 150               		.cfi_def_cfa_register 28
+ 151               	/* prologue: function */
+ 152               	/* frame size = 1 */
+ 153               	/* stack size = 6 */
+ 154               	.L__stack_usage = 6
+ 155 006c F82E      		mov r15,r24
+ 156               	.LVL12:
+  51:ps2kbd.c      **** /*	Complicated shit to send a PS/2 Packet.
+  52:ps2kbd.c      **** 	Begin the request by making both inputs outputs, drag clock low for at least 100us then take data 
+  53:ps2kbd.c      **** 	the device will soon after start clocking in the data so make clk an input again and pay attention
+  54:ps2kbd.c      **** 	The device will clock in 1 start bit, 8 data bits, 1 parity bit then 1 stop bit. It will then ack 
+  55:ps2kbd.c      **** 	uint8_t send_tries = 3;
+  56:ps2kbd.c      **** 	scancode = 0;
+ 157               		.loc 1 56 0
+ 158 006e 1092 0000 		sts scancode,__zero_reg__
+ 159 0072 03E0      		ldi r16,lo8(3)
+  57:ps2kbd.c      **** 	do
+  58:ps2kbd.c      **** 	{
+  59:ps2kbd.c      **** 		send_byte = data;
+  60:ps2kbd.c      **** 		send_parity = calc_parity(send_byte);
+  61:ps2kbd.c      **** 		EIMSK &= ~(1 << INT0);
+  62:ps2kbd.c      **** 		DDRD |= (1 << DDD2 | 1 << DDD3);
+  63:ps2kbd.c      **** 		PORTD &= ~(1 << PD2);
+  64:ps2kbd.c      **** 		_delay_us(200);
+  65:ps2kbd.c      **** 		PORTD &= ~(1 << PD3);
+  66:ps2kbd.c      **** 		PORTD |= (1 << PD2);
+  67:ps2kbd.c      **** 		DDRD &= ~(1 << DDD2);
+  68:ps2kbd.c      **** 		EIFR |= (1 << INTF0);
+  69:ps2kbd.c      **** 		EIMSK |= (1 << INT0);
+  70:ps2kbd.c      **** 		sr = 1;
+ 160               		.loc 1 70 0
+ 161 0074 11E0      		ldi r17,lo8(1)
+ 162               	.LVL13:
+ 163               	.L9:
+  59:ps2kbd.c      **** 		send_byte = data;
+ 164               		.loc 1 59 0
+ 165 0076 F092 0000 		sts send_byte,r15
+  60:ps2kbd.c      **** 		send_parity = calc_parity(send_byte);
+ 166               		.loc 1 60 0
+ 167 007a 8091 0000 		lds r24,send_byte
+ 168 007e 90E0      		ldi r25,0
+ 169 0080 6983      		std Y+1,r22
+ 170 0082 0E94 0000 		call calc_parity
+ 171               	.LVL14:
+ 172 0086 8093 0000 		sts send_parity,r24
+  61:ps2kbd.c      **** 		EIMSK &= ~(1 << INT0);
+ 173               		.loc 1 61 0
+ 174 008a E898      		cbi 0x1d,0
+  62:ps2kbd.c      **** 		DDRD |= (1 << DDD2 | 1 << DDD3);
+ 175               		.loc 1 62 0
+ 176 008c 9AB1      		in r25,0xa
+ 177 008e 9C60      		ori r25,lo8(12)
+ 178 0090 9AB9      		out 0xa,r25
+  63:ps2kbd.c      **** 		PORTD &= ~(1 << PD2);
+ 179               		.loc 1 63 0
+ 180 0092 5A98      		cbi 0xb,2
+ 181               	.LVL15:
+ 182               	.LBB8:
+ 183               	.LBB9:
+ 164:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 165:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #else
+ 166:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	uint16_t __ticks;
+ 167:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	__tmp = ((F_CPU) / 4e3) * __ms;
+ 168:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	if (__tmp < 1.0)
+ 169:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		__ticks = 1;
+ 170:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	else if (__tmp > 65535)
+ 171:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	{
+ 172:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		//	__ticks = requested delay in 1/10 ms
+ 173:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		__ticks = (uint16_t) (__ms * 10.0);
+ 174:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		while(__ticks)
+ 175:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		{
+ 176:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 			// wait 1/10 ms
+ 177:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 			_delay_loop_2(((F_CPU) / 4e3) / 10);
+ 178:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 			__ticks --;
+ 179:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		}
+ 180:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		return;
+ 181:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	}
+ 182:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	else
+ 183:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		__ticks = (uint16_t)__tmp;
+ 184:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	_delay_loop_2(__ticks);
+ 185:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #endif
+ 186:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** }
+ 187:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 188:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** /**
+ 189:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    \ingroup util_delay
+ 190:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 191:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    Perform a delay of \c __us microseconds, using _delay_loop_1().
+ 192:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 193:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    The macro F_CPU is supposed to be defined to a
+ 194:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    constant defining the CPU clock frequency (in Hertz).
+ 195:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 196:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    The maximal possible delay is 768 us / F_CPU in MHz.
+ 197:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 198:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    If the user requests a delay greater than the maximal possible one,
+ 199:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    _delay_us() will automatically call _delay_ms() instead.  The user
+ 200:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    will not be informed about this case.
+ 201:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 202:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    If the avr-gcc toolchain has __builtin_avr_delay_cycles(unsigned long)
+ 203:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    support, maximal possible delay is 4294967.295 us/ F_CPU in MHz. For
+ 204:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    values greater than the maximal possible delay, overflow results in
+ 205:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    no delay i.e., 0us.
+ 206:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   
+ 207:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    Conversion of __us into clock cycles may not always result in integer.
+ 208:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    By default, the clock cycles rounded up to next integer. This ensures that
+ 209:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    the user gets atleast __us microseconds of delay.
+ 210:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 211:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    Alternatively, user can define __DELAY_ROUND_DOWN__ and __DELAY_ROUND_CLOSEST__
+ 212:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    to round down and round to closest integer.
+ 213:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****  
+ 214:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    Note: The new implementation of _delay_us(double __us) with 
+ 215:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****     __builtin_avr_delay_cycles(unsigned long) support is not backward compatible.
+ 216:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    User can define __DELAY_BACKWARD_COMPATIBLE__ to get a backward compatible delay.
+ 217:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    Also, the backward compatible
+ 218:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    algorithm will be chosen if the code is compiled in a <em>freestanding
+ 219:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    environment</em> (GCC option \c -ffreestanding), as the math functions
+ 220:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****    required for rounding are not available to the compiler then.
+ 221:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 222:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****  */
+ 223:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** void
+ 224:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** _delay_us(double __us)
+ 225:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** {
+ 226:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	double __tmp ; 
+ 227:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** #if __HAS_DELAY_CYCLES && defined(__OPTIMIZE__) && \
+ 228:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   !defined(__DELAY_BACKWARD_COMPATIBLE__) &&	   \
+ 229:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h ****   __STDC_HOSTED__
+ 230:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	uint32_t __ticks_dc;
+ 231:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	extern void __builtin_avr_delay_cycles(unsigned long);
+ 232:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	__tmp = ((F_CPU) / 1e6) * __us;
+ 233:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 234:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	#if defined(__DELAY_ROUND_DOWN__)
+ 235:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)fabs(__tmp);
+ 236:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 237:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	#elif defined(__DELAY_ROUND_CLOSEST__)
+ 238:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)(fabs(__tmp)+0.5);
+ 239:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 240:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	#else
+ 241:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		//round up by default
+ 242:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 		__ticks_dc = (uint32_t)(ceil(fabs(__tmp)));
+ 243:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	#endif
+ 244:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 
+ 245:/usr/local/CrossPack-AVR-20131216/avr/include/util/delay.h **** 	__builtin_avr_delay_cycles(__ticks_dc);
+ 184               		.loc 2 245 0
+ 185 0094 8FE1      		ldi r24,lo8(799)
+ 186 0096 93E0      		ldi r25,hi8(799)
+ 187 0098 0197      		1: sbiw r24,1
+ 188 009a 01F4      		brne 1b
+ 189 009c 00C0      		rjmp .
+ 190 009e 0000      		nop
+ 191               	.LBE9:
+ 192               	.LBE8:
+  65:ps2kbd.c      **** 		PORTD &= ~(1 << PD3);
+ 193               		.loc 1 65 0
+ 194 00a0 5B98      		cbi 0xb,3
+  66:ps2kbd.c      **** 		PORTD |= (1 << PD2);
+ 195               		.loc 1 66 0
+ 196 00a2 5A9A      		sbi 0xb,2
+  67:ps2kbd.c      **** 		DDRD &= ~(1 << DDD2);
+ 197               		.loc 1 67 0
+ 198 00a4 5298      		cbi 0xa,2
+  68:ps2kbd.c      **** 		EIFR |= (1 << INTF0);
+ 199               		.loc 1 68 0
+ 200 00a6 E09A      		sbi 0x1c,0
+  69:ps2kbd.c      **** 		EIMSK |= (1 << INT0);
+ 201               		.loc 1 69 0
+ 202 00a8 E89A      		sbi 0x1d,0
+ 203               		.loc 1 70 0
+ 204 00aa 1093 0000 		sts sr,r17
+ 205 00ae 6981      		ldd r22,Y+1
+ 206               	.L5:
+  71:ps2kbd.c      **** 		while (sr == 1) {}
+ 207               		.loc 1 71 0 discriminator 1
+ 208 00b0 8091 0000 		lds r24,sr
+ 209 00b4 8130      		cpi r24,lo8(1)
+ 210 00b6 01F0      		breq .L5
+  72:ps2kbd.c      **** 		DDRD &= ~(1 << DDD2 | 1 << DDD3);
+ 211               		.loc 1 72 0
+ 212 00b8 9AB1      		in r25,0xa
+ 213 00ba 937F      		andi r25,lo8(-13)
+ 214 00bc 9AB9      		out 0xa,r25
+ 215               	.L7:
+  73:ps2kbd.c      **** 		while (strobe == 0) {} // Wait for ACK packet before proceeding
+ 216               		.loc 1 73 0 discriminator 1
+ 217 00be 8091 0000 		lds r24,strobe
+ 218 00c2 8823      		tst r24
+ 219 00c4 01F0      		breq .L7
+  74:ps2kbd.c      **** 		strobe = 0;
+ 220               		.loc 1 74 0
+ 221 00c6 1092 0000 		sts strobe,__zero_reg__
+ 222               	.LVL16:
+ 223 00ca 0150      		subi r16,lo8(-(-1))
+ 224               	.LVL17:
+  75:ps2kbd.c      **** 		send_tries--;
+  76:ps2kbd.c      **** 	}	while ((send_tries) && (scancode != 0xFA));
+ 225               		.loc 1 76 0
+ 226 00cc 01F0      		breq .L8
+ 227               		.loc 1 76 0 is_stmt 0 discriminator 1
+ 228 00ce 8091 0000 		lds r24,scancode
+ 229 00d2 8A3F      		cpi r24,lo8(-6)
+ 230 00d4 01F4      		brne .L9
+ 231               	.L8:
+  77:ps2kbd.c      **** 
+  78:ps2kbd.c      **** 	if (responseneeded) // Are we expecting a response besides ACK?
+ 232               		.loc 1 78 0 is_stmt 1
+ 233 00d6 6623      		tst r22
+ 234 00d8 01F0      		breq .L3
+ 235               	.L12:
+  79:ps2kbd.c      **** 	{
+  80:ps2kbd.c      **** 		while (strobe == 0) {}
+ 236               		.loc 1 80 0
+ 237 00da 8091 0000 		lds r24,strobe
+ 238 00de 8823      		tst r24
+ 239 00e0 01F0      		breq .L12
+  81:ps2kbd.c      **** 		strobe = 0;	
+ 240               		.loc 1 81 0
+ 241 00e2 1092 0000 		sts strobe,__zero_reg__
+ 242               	.L3:
+ 243               	/* epilogue start */
+  82:ps2kbd.c      **** 	}
+  83:ps2kbd.c      **** }
+ 244               		.loc 1 83 0
+ 245 00e6 0F90      		pop __tmp_reg__
+ 246 00e8 DF91      		pop r29
+ 247 00ea CF91      		pop r28
+ 248 00ec 1F91      		pop r17
+ 249 00ee 0F91      		pop r16
+ 250               	.LVL18:
+ 251 00f0 FF90      		pop r15
+ 252               	.LVL19:
+ 253 00f2 0895      		ret
+ 254               		.cfi_endproc
+ 255               	.LFE10:
+ 257               		.section	.rodata.str1.1
+ 258               	.LC1:
+ 259 0003 2150 00   		.string	"!P"
+ 260               		.text
+ 261               	.global	parity_error
+ 263               	parity_error:
+ 264               	.LFB9:
+  43:ps2kbd.c      **** {	
+ 265               		.loc 1 43 0
+ 266               		.cfi_startproc
+ 267               	/* prologue: function */
+ 268               	/* frame size = 0 */
+ 269               	/* stack size = 0 */
+ 270               	.L__stack_usage = 0
+  44:ps2kbd.c      **** 	parity_errors++;
+ 271               		.loc 1 44 0
+ 272 00f4 8091 0000 		lds r24,parity_errors
+ 273 00f8 8F5F      		subi r24,lo8(-(1))
+ 274 00fa 8093 0000 		sts parity_errors,r24
+  45:ps2kbd.c      **** 	sendps2(0xFE,0); // Inform the KBD of the Parity error and request a resend.
+ 275               		.loc 1 45 0
+ 276 00fe 60E0      		ldi r22,0
+ 277 0100 70E0      		ldi r23,0
+ 278 0102 8EEF      		ldi r24,lo8(-2)
+ 279 0104 90E0      		ldi r25,0
+ 280 0106 0E94 0000 		call sendps2
+ 281               	.LVL20:
+  46:ps2kbd.c      **** 	printf("!P");
+ 282               		.loc 1 46 0
+ 283 010a 80E0      		ldi r24,lo8(.LC1)
+ 284 010c 90E0      		ldi r25,hi8(.LC1)
+ 285 010e 9F93      		push r25
+ 286               	.LCFI10:
+ 287               		.cfi_def_cfa_offset 3
+ 288 0110 8F93      		push r24
+ 289               	.LCFI11:
+ 290               		.cfi_def_cfa_offset 4
+ 291 0112 0E94 0000 		call printf
+ 292               	.LVL21:
+ 293 0116 0F90      		pop __tmp_reg__
+ 294 0118 0F90      		pop __tmp_reg__
+ 295               	.LCFI12:
+ 296               		.cfi_def_cfa_offset 2
+ 297 011a 0895      		ret
+ 298               		.cfi_endproc
+ 299               	.LFE9:
+ 301               	.global	__vector_1
+ 303               	__vector_1:
+ 304               	.LFB11:
+  84:ps2kbd.c      **** 
+  85:ps2kbd.c      **** ISR (INT0_vect)
+  86:ps2kbd.c      **** {
+ 305               		.loc 1 86 0
+ 306               		.cfi_startproc
+ 307 011c 1F92      		push r1
+ 308               	.LCFI13:
+ 309               		.cfi_def_cfa_offset 3
+ 310               		.cfi_offset 1, -2
+ 311 011e 0F92      		push r0
+ 312               	.LCFI14:
+ 313               		.cfi_def_cfa_offset 4
+ 314               		.cfi_offset 0, -3
+ 315 0120 0FB6      		in r0,__SREG__
+ 316 0122 0F92      		push r0
+ 317 0124 1124      		clr __zero_reg__
+ 318 0126 2F93      		push r18
+ 319               	.LCFI15:
+ 320               		.cfi_def_cfa_offset 5
+ 321               		.cfi_offset 18, -4
+ 322 0128 3F93      		push r19
+ 323               	.LCFI16:
+ 324               		.cfi_def_cfa_offset 6
+ 325               		.cfi_offset 19, -5
+ 326 012a 4F93      		push r20
+ 327               	.LCFI17:
+ 328               		.cfi_def_cfa_offset 7
+ 329               		.cfi_offset 20, -6
+ 330 012c 5F93      		push r21
+ 331               	.LCFI18:
+ 332               		.cfi_def_cfa_offset 8
+ 333               		.cfi_offset 21, -7
+ 334 012e 6F93      		push r22
+ 335               	.LCFI19:
+ 336               		.cfi_def_cfa_offset 9
+ 337               		.cfi_offset 22, -8
+ 338 0130 7F93      		push r23
+ 339               	.LCFI20:
+ 340               		.cfi_def_cfa_offset 10
+ 341               		.cfi_offset 23, -9
+ 342 0132 8F93      		push r24
+ 343               	.LCFI21:
+ 344               		.cfi_def_cfa_offset 11
+ 345               		.cfi_offset 24, -10
+ 346 0134 9F93      		push r25
+ 347               	.LCFI22:
+ 348               		.cfi_def_cfa_offset 12
+ 349               		.cfi_offset 25, -11
+ 350 0136 AF93      		push r26
+ 351               	.LCFI23:
+ 352               		.cfi_def_cfa_offset 13
+ 353               		.cfi_offset 26, -12
+ 354 0138 BF93      		push r27
+ 355               	.LCFI24:
+ 356               		.cfi_def_cfa_offset 14
+ 357               		.cfi_offset 27, -13
+ 358 013a EF93      		push r30
+ 359               	.LCFI25:
+ 360               		.cfi_def_cfa_offset 15
+ 361               		.cfi_offset 30, -14
+ 362 013c FF93      		push r31
+ 363               	.LCFI26:
+ 364               		.cfi_def_cfa_offset 16
+ 365               		.cfi_offset 31, -15
+ 366               	/* prologue: Signal */
+ 367               	/* frame size = 0 */
+ 368               	/* stack size = 15 */
+ 369               	.L__stack_usage = 15
+  87:ps2kbd.c      **** if (sr == 1) { //Send bytes to device.
+ 370               		.loc 1 87 0
+ 371 013e 8091 0000 		lds r24,sr
+ 372 0142 8130      		cpi r24,lo8(1)
+ 373 0144 01F4      		brne .L25
+  88:ps2kbd.c      **** 	if (send_bitcount >=0 && send_bitcount <=7)
+ 374               		.loc 1 88 0
+ 375 0146 8091 0000 		lds r24,send_bitcount
+ 376 014a 8091 0000 		lds r24,send_bitcount
+ 377 014e 8830      		cpi r24,lo8(8)
+ 378 0150 00F4      		brsh .L26
+  89:ps2kbd.c      **** 	{
+  90:ps2kbd.c      **** 		if ((send_byte >> send_bitcount) & 1) {
+ 379               		.loc 1 90 0
+ 380 0152 8091 0000 		lds r24,send_byte
+ 381 0156 2091 0000 		lds r18,send_bitcount
+ 382 015a 90E0      		ldi r25,0
+ 383 015c 00C0      		rjmp 2f
+ 384               		1:
+ 385 015e 9595      		asr r25
+ 386 0160 8795      		ror r24
+ 387               		2:
+ 388 0162 2A95      		dec r18
+ 389 0164 02F4      		brpl 1b
+ 390 0166 80FF      		sbrs r24,0
+ 391 0168 00C0      		rjmp .L44
+ 392 016a 00C0      		rjmp .L43
+ 393               	.L26:
+  91:ps2kbd.c      **** 			PORTD |= (1 << PD3);
+  92:ps2kbd.c      **** 		}
+  93:ps2kbd.c      **** 		else
+  94:ps2kbd.c      **** 		{
+  95:ps2kbd.c      **** 			PORTD &= ~(1 << PD3);
+  96:ps2kbd.c      **** 		}
+  97:ps2kbd.c      **** 	}
+  98:ps2kbd.c      **** 	else if (send_bitcount == 8)
+ 394               		.loc 1 98 0
+ 395 016c 8091 0000 		lds r24,send_bitcount
+ 396 0170 8830      		cpi r24,lo8(8)
+ 397 0172 01F4      		brne .L29
+  99:ps2kbd.c      **** 	{	
+ 100:ps2kbd.c      **** 		if (send_parity)
+ 398               		.loc 1 100 0
+ 399 0174 8091 0000 		lds r24,send_parity
+ 400 0178 8823      		tst r24
+ 401 017a 01F0      		breq .L43
+ 402               	.L44:
+ 101:ps2kbd.c      **** 		{
+ 102:ps2kbd.c      **** 			PORTD &= ~(1 << PD3);
+ 403               		.loc 1 102 0
+ 404 017c 5B98      		cbi 0xb,3
+ 405 017e 00C0      		rjmp .L28
+ 406               	.L29:
+ 103:ps2kbd.c      **** 		}
+ 104:ps2kbd.c      **** 		else
+ 105:ps2kbd.c      **** 		{
+ 106:ps2kbd.c      **** 			PORTD |= (1 << PD3);
+ 107:ps2kbd.c      **** 		}
+ 108:ps2kbd.c      **** 	}
+ 109:ps2kbd.c      **** 	else if (send_bitcount == 9)
+ 407               		.loc 1 109 0
+ 408 0180 8091 0000 		lds r24,send_bitcount
+ 409 0184 8930      		cpi r24,lo8(9)
+ 410 0186 01F4      		brne .L28
+ 411               	.L43:
+ 110:ps2kbd.c      **** 	{
+ 111:ps2kbd.c      **** 		PORTD |= (1 << PD3);
+ 412               		.loc 1 111 0
+ 413 0188 5B9A      		sbi 0xb,3
+ 414               	.L28:
+ 112:ps2kbd.c      **** 	}
+ 113:ps2kbd.c      **** 	if (send_bitcount < 10)
+ 415               		.loc 1 113 0
+ 416 018a 8091 0000 		lds r24,send_bitcount
+ 417 018e 8A30      		cpi r24,lo8(10)
+ 418 0190 00F4      		brsh .L31
+ 114:ps2kbd.c      **** 	{
+ 115:ps2kbd.c      **** 		send_bitcount++;
+ 419               		.loc 1 115 0
+ 420 0192 8091 0000 		lds r24,send_bitcount
+ 421 0196 8F5F      		subi r24,lo8(-(1))
+ 422 0198 8093 0000 		sts send_bitcount,r24
+ 423 019c 00C0      		rjmp .L24
+ 424               	.L31:
+ 116:ps2kbd.c      **** 	}
+ 117:ps2kbd.c      **** 	else
+ 118:ps2kbd.c      **** 	{
+ 119:ps2kbd.c      **** 		send_bitcount = 0;
+ 425               		.loc 1 119 0
+ 426 019e 1092 0000 		sts send_bitcount,__zero_reg__
+ 120:ps2kbd.c      **** 		sr = 0;
+ 427               		.loc 1 120 0
+ 428 01a2 1092 0000 		sts sr,__zero_reg__
+ 429 01a6 00C0      		rjmp .L24
+ 430               	.L25:
+ 431               	.LVL22:
+ 432               	.LBB10:
+ 121:ps2kbd.c      **** 	}
+ 122:ps2kbd.c      **** }
+ 123:ps2kbd.c      **** 
+ 124:ps2kbd.c      **** else { // Receive from device
+ 125:ps2kbd.c      **** uint8_t result = 0;
+ 126:ps2kbd.c      **** 
+ 127:ps2kbd.c      **** 	if (PIND & (1 << PD3)) 
+ 433               		.loc 1 127 0
+ 434 01a8 89B1      		in r24,0x9
+ 435 01aa 83FB      		bst r24,3
+ 436 01ac 8827      		clr r24
+ 437 01ae 80F9      		bld r24,0
+ 438               	.LVL23:
+ 128:ps2kbd.c      **** 	{
+ 129:ps2kbd.c      **** 		result = 1;
+ 130:ps2kbd.c      **** 	}
+ 131:ps2kbd.c      **** 	else {
+ 132:ps2kbd.c      **** 		result = 0;
+ 133:ps2kbd.c      **** 	}
+ 134:ps2kbd.c      **** if (rcv_bitcount <=9) 
+ 439               		.loc 1 134 0
+ 440 01b0 9091 0000 		lds r25,rcv_bitcount
+ 441 01b4 9A30      		cpi r25,lo8(10)
+ 442 01b6 00F4      		brsh .L33
+ 135:ps2kbd.c      **** {
+ 136:ps2kbd.c      **** 	if (rcv_bitcount >=1 && rcv_bitcount <= 8) 
+ 443               		.loc 1 136 0
+ 444 01b8 9091 0000 		lds r25,rcv_bitcount
+ 445 01bc 9923      		tst r25
+ 446 01be 01F0      		breq .L34
+ 447               		.loc 1 136 0 is_stmt 0 discriminator 1
+ 448 01c0 9091 0000 		lds r25,rcv_bitcount
+ 449 01c4 9930      		cpi r25,lo8(9)
+ 450 01c6 00F4      		brsh .L34
+ 137:ps2kbd.c      **** 	{
+ 138:ps2kbd.c      **** 		rcv_byte |= (result << (rcv_bitcount - 1));
+ 451               		.loc 1 138 0 is_stmt 1
+ 452 01c8 2091 0000 		lds r18,rcv_byte
+ 453 01cc 3091 0000 		lds r19,rcv_bitcount
+ 454 01d0 3150      		subi r19,lo8(-(-1))
+ 455 01d2 032E      		mov r0,r19
+ 456 01d4 00C0      		rjmp 2f
+ 457               		1:
+ 458 01d6 880F      		lsl r24
+ 459               		2:
+ 460 01d8 0A94      		dec r0
+ 461 01da 02F4      		brpl 1b
+ 462               	.LVL24:
+ 463 01dc 282B      		or r18,r24
+ 464 01de 2093 0000 		sts rcv_byte,r18
+ 465 01e2 00C0      		rjmp .L35
+ 466               	.LVL25:
+ 467               	.L34:
+ 139:ps2kbd.c      **** 	}
+ 140:ps2kbd.c      **** 	else if (rcv_bitcount == 0)
+ 468               		.loc 1 140 0
+ 469 01e4 9091 0000 		lds r25,rcv_bitcount
+ 470 01e8 9923      		tst r25
+ 471 01ea 01F0      		breq .L45
+ 141:ps2kbd.c      **** 	{
+ 142:ps2kbd.c      **** 		ssp = result; // Start Bit
+ 143:ps2kbd.c      **** 	}
+ 144:ps2kbd.c      **** 	else if (rcv_bitcount == 9)
+ 472               		.loc 1 144 0
+ 473 01ec 9091 0000 		lds r25,rcv_bitcount
+ 474 01f0 9930      		cpi r25,lo8(9)
+ 475 01f2 01F4      		brne .L35
+ 145:ps2kbd.c      **** 	{
+ 146:ps2kbd.c      **** 		ssp |= (result << 2); // Parity Bit
+ 476               		.loc 1 146 0
+ 477 01f4 9091 0000 		lds r25,ssp
+ 478 01f8 880F      		lsl r24
+ 479 01fa 880F      		lsl r24
+ 480               	.LVL26:
+ 481 01fc 892B      		or r24,r25
+ 482               	.L45:
+ 483 01fe 8093 0000 		sts ssp,r24
+ 484               	.L35:
+ 147:ps2kbd.c      **** 	}
+ 148:ps2kbd.c      **** 	rcv_bitcount++;
+ 485               		.loc 1 148 0 discriminator 1
+ 486 0202 8091 0000 		lds r24,rcv_bitcount
+ 487 0206 8F5F      		subi r24,lo8(-(1))
+ 488 0208 8093 0000 		sts rcv_bitcount,r24
+ 489 020c 00C0      		rjmp .L24
+ 490               	.LVL27:
+ 491               	.L33:
+ 149:ps2kbd.c      **** }
+ 150:ps2kbd.c      **** 	else if (rcv_bitcount >= 10) 
+ 492               		.loc 1 150 0
+ 493 020e 9091 0000 		lds r25,rcv_bitcount
+ 494 0212 9A30      		cpi r25,lo8(10)
+ 495 0214 00F0      		brlo .L24
+ 151:ps2kbd.c      **** 	{
+ 152:ps2kbd.c      **** 		ssp |= (result << 1); // Stop Bit
+ 496               		.loc 1 152 0
+ 497 0216 9091 0000 		lds r25,ssp
+ 498 021a 880F      		lsl r24
+ 499               	.LVL28:
+ 500 021c 892B      		or r24,r25
+ 501 021e 8093 0000 		sts ssp,r24
+ 153:ps2kbd.c      **** 		if ((ssp & 0x2) != 0x02) // Check start and stop bits.
+ 502               		.loc 1 153 0
+ 503 0222 8091 0000 		lds r24,ssp
+ 504 0226 81FD      		sbrc r24,1
+ 505 0228 00C0      		rjmp .L37
+ 154:ps2kbd.c      **** 		{
+ 155:ps2kbd.c      **** 			framing_error(ssp);
+ 506               		.loc 1 155 0
+ 507 022a 8091 0000 		lds r24,ssp
+ 508 022e 0E94 0000 		call framing_error
+ 509               	.LVL29:
+ 510 0232 00C0      		rjmp .L38
+ 511               	.L37:
+ 156:ps2kbd.c      **** 		} 
+ 157:ps2kbd.c      **** 		else if (calc_parity(rcv_byte) == (ssp >> 2))
+ 512               		.loc 1 157 0
+ 513 0234 8091 0000 		lds r24,rcv_byte
+ 514 0238 90E0      		ldi r25,0
+ 515 023a 0E94 0000 		call calc_parity
+ 516               	.LVL30:
+ 517 023e 2091 0000 		lds r18,ssp
+ 518 0242 2695      		lsr r18
+ 519 0244 2695      		lsr r18
+ 520 0246 30E0      		ldi r19,0
+ 521 0248 8217      		cp r24,r18
+ 522 024a 9307      		cpc r25,r19
+ 523 024c 01F4      		brne .L39
+ 158:ps2kbd.c      **** 		{
+ 159:ps2kbd.c      **** 			parity_error();
+ 524               		.loc 1 159 0
+ 525 024e 0E94 0000 		call parity_error
+ 526               	.LVL31:
+ 160:ps2kbd.c      **** 			strobe = 0;
+ 527               		.loc 1 160 0
+ 528 0252 1092 0000 		sts strobe,__zero_reg__
+ 529 0256 00C0      		rjmp .L38
+ 530               	.L39:
+ 161:ps2kbd.c      **** 		}
+ 162:ps2kbd.c      **** 		else 
+ 163:ps2kbd.c      **** 		{
+ 164:ps2kbd.c      **** 			scancode = rcv_byte;
+ 531               		.loc 1 164 0
+ 532 0258 8091 0000 		lds r24,rcv_byte
+ 533 025c 8093 0000 		sts scancode,r24
+ 165:ps2kbd.c      **** 			strobe = 1;
+ 534               		.loc 1 165 0
+ 535 0260 81E0      		ldi r24,lo8(1)
+ 536 0262 8093 0000 		sts strobe,r24
+ 537               	.L38:
+ 166:ps2kbd.c      **** 		}
+ 167:ps2kbd.c      **** 		rcv_bitcount = 0;
+ 538               		.loc 1 167 0
+ 539 0266 1092 0000 		sts rcv_bitcount,__zero_reg__
+ 168:ps2kbd.c      **** 		rcv_byte = 0;
+ 540               		.loc 1 168 0
+ 541 026a 1092 0000 		sts rcv_byte,__zero_reg__
+ 542               	.LVL32:
+ 543               	.L24:
+ 544               	/* epilogue start */
+ 545               	.LBE10:
+ 169:ps2kbd.c      **** 		result = 0;
+ 170:ps2kbd.c      **** 	} 
+ 171:ps2kbd.c      **** 
+ 172:ps2kbd.c      **** }
+ 173:ps2kbd.c      **** 
+ 174:ps2kbd.c      **** }
+ 546               		.loc 1 174 0
+ 547 026e FF91      		pop r31
+ 548 0270 EF91      		pop r30
+ 549 0272 BF91      		pop r27
+ 550 0274 AF91      		pop r26
+ 551 0276 9F91      		pop r25
+ 552 0278 8F91      		pop r24
+ 553 027a 7F91      		pop r23
+ 554 027c 6F91      		pop r22
+ 555 027e 5F91      		pop r21
+ 556 0280 4F91      		pop r20
+ 557 0282 3F91      		pop r19
+ 558 0284 2F91      		pop r18
+ 559 0286 0F90      		pop r0
+ 560 0288 0FBE      		out __SREG__,r0
+ 561 028a 0F90      		pop r0
+ 562 028c 1F90      		pop r1
+ 563 028e 1895      		reti
+ 564               		.cfi_endproc
+ 565               	.LFE11:
+ 567               		.section	.rodata.str1.1
+ 568               	.LC2:
+ 569 0006 5374 6172 		.string	"Startup Completed. \r"
+ 569      7475 7020 
+ 569      436F 6D70 
+ 569      6C65 7465 
+ 569      642E 200D 
+ 570               	.LC3:
+ 571 001b 4B65 7962 		.string	"Keyboard Self-test completed: 0x%x\r\n"
+ 571      6F61 7264 
+ 571      2053 656C 
+ 571      662D 7465 
+ 571      7374 2063 
+ 572               	.LC4:
+ 573 0040 5363 616E 		.string	"Scancode: %x %x\r\n"
+ 573      636F 6465 
+ 573      3A20 2578 
+ 573      2025 780D 
+ 573      0A00 
+ 574               		.section	.text.startup,"ax",@progbits
+ 575               	.global	main
+ 577               	main:
+ 578               	.LFB12:
+ 175:ps2kbd.c      **** 
+ 176:ps2kbd.c      **** 
+ 177:ps2kbd.c      **** int main (void) {
+ 579               		.loc 1 177 0
+ 580               		.cfi_startproc
+ 581 0000 CF93      		push r28
+ 582               	.LCFI27:
+ 583               		.cfi_def_cfa_offset 3
+ 584               		.cfi_offset 28, -2
+ 585 0002 DF93      		push r29
+ 586               	.LCFI28:
+ 587               		.cfi_def_cfa_offset 4
+ 588               		.cfi_offset 29, -3
+ 589 0004 00D0      		rcall .
+ 590 0006 1F92      		push __zero_reg__
+ 591               	.LCFI29:
+ 592               		.cfi_def_cfa_offset 7
+ 593 0008 CDB7      		in r28,__SP_L__
+ 594 000a DEB7      		in r29,__SP_H__
+ 595               	.LCFI30:
+ 596               		.cfi_def_cfa_register 28
+ 597               	/* prologue: function */
+ 598               	/* frame size = 3 */
+ 599               	/* stack size = 5 */
+ 600               	.L__stack_usage = 5
+ 178:ps2kbd.c      **** volatile uint8_t kbd_curr_cmd = 0;
+ 601               		.loc 1 178 0
+ 602 000c 1B82      		std Y+3,__zero_reg__
+ 179:ps2kbd.c      **** volatile uint8_t kbd_lights = 0;
+ 603               		.loc 1 179 0
+ 604 000e 1A82      		std Y+2,__zero_reg__
+ 180:ps2kbd.c      **** volatile uint8_t last_cmd = 0;
+ 605               		.loc 1 180 0
+ 606 0010 1982      		std Y+1,__zero_reg__
+ 181:ps2kbd.c      **** DDRD &= ~(1 << DDD2 | 1 << DDD3);
+ 607               		.loc 1 181 0
+ 608 0012 8AB1      		in r24,0xa
+ 609 0014 837F      		andi r24,lo8(-13)
+ 610 0016 8AB9      		out 0xa,r24
+ 182:ps2kbd.c      **** EICRA |= (1 << ISC01);
+ 611               		.loc 1 182 0
+ 612 0018 8091 6900 		lds r24,105
+ 613 001c 8260      		ori r24,lo8(2)
+ 614 001e 8093 6900 		sts 105,r24
+ 183:ps2kbd.c      **** EIMSK |= (1 << INT0);
+ 615               		.loc 1 183 0
+ 616 0022 E89A      		sbi 0x1d,0
+ 184:ps2kbd.c      **** uart_init();
+ 617               		.loc 1 184 0
+ 618 0024 0E94 0000 		call uart_init
+ 619               	.LVL33:
+ 185:ps2kbd.c      **** stdout = &uart_output;
+ 620               		.loc 1 185 0
+ 621 0028 80E0      		ldi r24,lo8(uart_output)
+ 622 002a 90E0      		ldi r25,hi8(uart_output)
+ 623 002c 9093 0000 		sts __iob+2+1,r25
+ 624 0030 8093 0000 		sts __iob+2,r24
+ 186:ps2kbd.c      **** stdin  = &uart_input;
+ 625               		.loc 1 186 0
+ 626 0034 80E0      		ldi r24,lo8(uart_input)
+ 627 0036 90E0      		ldi r25,hi8(uart_input)
+ 628 0038 9093 0000 		sts __iob+1,r25
+ 629 003c 8093 0000 		sts __iob,r24
+ 187:ps2kbd.c      **** printf("Startup Completed. \r\n");
+ 630               		.loc 1 187 0
+ 631 0040 80E0      		ldi r24,lo8(.LC2)
+ 632 0042 90E0      		ldi r25,hi8(.LC2)
+ 633 0044 0E94 0000 		call puts
+ 634               	.LVL34:
+ 188:ps2kbd.c      **** 
+ 189:ps2kbd.c      **** sei();
+ 635               		.loc 1 189 0
+ 636               	/* #APP */
+ 637               	 ;  189 "ps2kbd.c" 1
+ 638 0048 7894      		sei
+ 639               	 ;  0 "" 2
+ 190:ps2kbd.c      **** sendps2(0xff,1); // reset kbd
+ 640               		.loc 1 190 0
+ 641               	/* #NOAPP */
+ 642 004a 61E0      		ldi r22,lo8(1)
+ 643 004c 8FEF      		ldi r24,lo8(-1)
+ 644 004e 0E94 0000 		call sendps2
+ 645               	.LVL35:
+ 191:ps2kbd.c      **** printf("Keyboard Self-test completed: 0x%x\r\n", scancode);
+ 646               		.loc 1 191 0
+ 647 0052 8091 0000 		lds r24,scancode
+ 648 0056 1F92      		push __zero_reg__
+ 649 0058 8F93      		push r24
+ 650 005a 80E0      		ldi r24,lo8(.LC3)
+ 651 005c 90E0      		ldi r25,hi8(.LC3)
+ 652 005e 9F93      		push r25
+ 653 0060 8F93      		push r24
+ 654 0062 0E94 0000 		call printf
+ 655               	.LVL36:
+ 192:ps2kbd.c      **** sendps2(0xf0,0); // Set Codeset 
+ 656               		.loc 1 192 0
+ 657 0066 60E0      		ldi r22,0
+ 658 0068 80EF      		ldi r24,lo8(-16)
+ 659 006a 0E94 0000 		call sendps2
+ 660               	.LVL37:
+ 193:ps2kbd.c      **** sendps2(0x02,0); // Codeset 2
+ 661               		.loc 1 193 0
+ 662 006e 60E0      		ldi r22,0
+ 663 0070 82E0      		ldi r24,lo8(2)
+ 664 0072 0E94 0000 		call sendps2
+ 665               	.LVL38:
+ 666 0076 0F90      		pop __tmp_reg__
+ 667 0078 0F90      		pop __tmp_reg__
+ 668 007a 0F90      		pop __tmp_reg__
+ 669 007c 0F90      		pop __tmp_reg__
+ 194:ps2kbd.c      **** 
+ 195:ps2kbd.c      **** 	while (1) {
+ 196:ps2kbd.c      **** 		if (strobe)
+ 197:ps2kbd.c      **** 		{
+ 198:ps2kbd.c      **** 			if (scancode == 0x52 && kbd_curr_cmd == 0)
+ 199:ps2kbd.c      **** 			{
+ 200:ps2kbd.c      **** 				kbd_lights ^= 1 << 2;
+ 201:ps2kbd.c      **** 				sendps2(0xed,0);
+ 202:ps2kbd.c      **** 				sendps2(kbd_lights,0);
+ 203:ps2kbd.c      **** 			}
+ 204:ps2kbd.c      **** 			else if (scancode != 0xf0)
+ 205:ps2kbd.c      **** 			{
+ 206:ps2kbd.c      **** 				printf("Scancode: %x %x\r\n", scancode, kbd_curr_cmd);
+ 670               		.loc 1 206 0
+ 671 007e 00E0      		ldi r16,lo8(.LC4)
+ 672 0080 10E0      		ldi r17,hi8(.LC4)
+ 200:ps2kbd.c      **** 				kbd_lights ^= 1 << 2;
+ 673               		.loc 1 200 0
+ 674 0082 E4E0      		ldi r30,lo8(4)
+ 675 0084 FE2E      		mov r15,r30
+ 207:ps2kbd.c      **** 			}
+ 208:ps2kbd.c      **** 			if (scancode == 0xf0) {
+ 209:ps2kbd.c      **** 				kbd_curr_cmd = 1; //key_up
+ 676               		.loc 1 209 0
+ 677 0086 EE24      		clr r14
+ 678 0088 E394      		inc r14
+ 679               	.L48:
+ 196:ps2kbd.c      **** 		if (strobe)
+ 680               		.loc 1 196 0
+ 681 008a 8091 0000 		lds r24,strobe
+ 682 008e 8823      		tst r24
+ 683 0090 01F0      		breq .L48
+ 198:ps2kbd.c      **** 			if (scancode == 0x52 && kbd_curr_cmd == 0)
+ 684               		.loc 1 198 0
+ 685 0092 8091 0000 		lds r24,scancode
+ 686 0096 8235      		cpi r24,lo8(82)
+ 687 0098 01F4      		brne .L49
+ 198:ps2kbd.c      **** 			if (scancode == 0x52 && kbd_curr_cmd == 0)
+ 688               		.loc 1 198 0 is_stmt 0 discriminator 1
+ 689 009a 8B81      		ldd r24,Y+3
+ 690 009c 8111      		cpse r24,__zero_reg__
+ 691 009e 00C0      		rjmp .L49
+ 200:ps2kbd.c      **** 				kbd_lights ^= 1 << 2;
+ 692               		.loc 1 200 0 is_stmt 1
+ 693 00a0 8A81      		ldd r24,Y+2
+ 694 00a2 8F25      		eor r24,r15
+ 695 00a4 8A83      		std Y+2,r24
+ 201:ps2kbd.c      **** 				sendps2(0xed,0);
+ 696               		.loc 1 201 0
+ 697 00a6 60E0      		ldi r22,0
+ 698 00a8 8DEE      		ldi r24,lo8(-19)
+ 699 00aa 0E94 0000 		call sendps2
+ 700               	.LVL39:
+ 202:ps2kbd.c      **** 				sendps2(kbd_lights,0);
+ 701               		.loc 1 202 0
+ 702 00ae 8A81      		ldd r24,Y+2
+ 703 00b0 60E0      		ldi r22,0
+ 704 00b2 0E94 0000 		call sendps2
+ 705               	.LVL40:
+ 706 00b6 00C0      		rjmp .L50
+ 707               	.L49:
+ 204:ps2kbd.c      **** 			else if (scancode != 0xf0)
+ 708               		.loc 1 204 0
+ 709 00b8 8091 0000 		lds r24,scancode
+ 710 00bc 803F      		cpi r24,lo8(-16)
+ 711 00be 01F0      		breq .L50
+ 206:ps2kbd.c      **** 				printf("Scancode: %x %x\r\n", scancode, kbd_curr_cmd);
+ 712               		.loc 1 206 0
+ 713 00c0 9B81      		ldd r25,Y+3
+ 714 00c2 8091 0000 		lds r24,scancode
+ 715 00c6 1F92      		push __zero_reg__
+ 716 00c8 9F93      		push r25
+ 717 00ca 1F92      		push __zero_reg__
+ 718 00cc 8F93      		push r24
+ 719 00ce 1F93      		push r17
+ 720 00d0 0F93      		push r16
+ 721 00d2 0E94 0000 		call printf
+ 722               	.LVL41:
+ 723 00d6 0F90      		pop __tmp_reg__
+ 724 00d8 0F90      		pop __tmp_reg__
+ 725 00da 0F90      		pop __tmp_reg__
+ 726 00dc 0F90      		pop __tmp_reg__
+ 727 00de 0F90      		pop __tmp_reg__
+ 728 00e0 0F90      		pop __tmp_reg__
+ 729               	.L50:
+ 208:ps2kbd.c      **** 			if (scancode == 0xf0) {
+ 730               		.loc 1 208 0
+ 731 00e2 8091 0000 		lds r24,scancode
+ 732 00e6 803F      		cpi r24,lo8(-16)
+ 733 00e8 01F4      		brne .L51
+ 734               		.loc 1 209 0
+ 735 00ea EB82      		std Y+3,r14
+ 736 00ec 00C0      		rjmp .L52
+ 737               	.L51:
+ 210:ps2kbd.c      **** 			}
+ 211:ps2kbd.c      **** 			else 
+ 212:ps2kbd.c      **** 			{
+ 213:ps2kbd.c      **** 				kbd_curr_cmd = 0; //key_down
+ 738               		.loc 1 213 0
+ 739 00ee 1B82      		std Y+3,__zero_reg__
+ 740               	.L52:
+ 214:ps2kbd.c      **** 			}
+ 215:ps2kbd.c      **** 			strobe = 0;
+ 741               		.loc 1 215 0
+ 742 00f0 1092 0000 		sts strobe,__zero_reg__
+ 743 00f4 00C0      		rjmp .L48
+ 744               		.cfi_endproc
+ 745               	.LFE12:
+ 747               	.global	framing_errors
+ 748               		.section .bss
+ 751               	framing_errors:
+ 752 0000 00        		.zero	1
+ 753               	.global	parity_errors
+ 756               	parity_errors:
+ 757 0001 00        		.zero	1
+ 758               		.comm	send_byte,1,1
+ 759               		.comm	send_parity,1,1
+ 760               	.global	sr
+ 763               	sr:
+ 764 0002 00        		.zero	1
+ 765               	.global	ssp
+ 768               	ssp:
+ 769 0003 00        		.zero	1
+ 770               	.global	strobe
+ 773               	strobe:
+ 774 0004 00        		.zero	1
+ 775               	.global	scancode
+ 778               	scancode:
+ 779 0005 00        		.zero	1
+ 780               	.global	send_bitcount
+ 783               	send_bitcount:
+ 784 0006 00        		.zero	1
+ 785               	.global	rcv_bitcount
+ 788               	rcv_bitcount:
+ 789 0007 00        		.zero	1
+ 790               	.global	rcv_byte
+ 793               	rcv_byte:
+ 794 0008 00        		.zero	1
+ 795               	.global	uart_input
+ 796               		.data
+ 799               	uart_input:
+ 800 0000 0000 00   		.zero	3
+ 801 0003 01        		.byte	1
+ 802 0004 0000 0000 		.zero	4
+ 803 0008 0000      		.word	0
+ 804 000a 0000      		.word	gs(uart_getchar)
+ 805 000c 0000      		.word	0
+ 806               	.global	uart_output
+ 809               	uart_output:
+ 810 000e 0000 00   		.zero	3
+ 811 0011 02        		.byte	2
+ 812 0012 0000 0000 		.zero	4
+ 813 0016 0000      		.word	gs(uart_putchar)
+ 814 0018 0000      		.word	0
+ 815 001a 0000      		.word	0
+ 816               	.global	ps2_toascii
+ 817               		.section	.rodata
+ 820               	ps2_toascii:
+ 821 0000 00        		.byte	0
+ 822 0001 00        		.byte	0
+ 823 0002 00        		.byte	0
+ 824 0003 00        		.byte	0
+ 825 0004 00        		.byte	0
+ 826 0005 00        		.byte	0
+ 827 0006 00        		.byte	0
+ 828 0007 00        		.byte	0
+ 829 0008 00        		.byte	0
+ 830 0009 00        		.byte	0
+ 831 000a 00        		.byte	0
+ 832 000b 00        		.byte	0
+ 833 000c 00        		.byte	0
+ 834 000d 00        		.byte	0
+ 835 000e 60        		.byte	96
+ 836 000f 00        		.byte	0
+ 837 0010 00        		.byte	0
+ 838 0011 00        		.byte	0
+ 839 0012 00        		.byte	0
+ 840 0013 00        		.byte	0
+ 841 0014 00        		.byte	0
+ 842 0015 71        		.byte	113
+ 843 0016 31        		.byte	49
+ 844 0017 00        		.byte	0
+ 845 0018 00        		.byte	0
+ 846 0019 7A        		.byte	122
+ 847 001a 73        		.byte	115
+ 848 001b 61        		.byte	97
+ 849 001c 77        		.byte	119
+ 850 001d 32        		.byte	50
+ 851 001e 00        		.byte	0
+ 852 001f 00        		.byte	0
+ 853 0020 63        		.byte	99
+ 854 0021 78        		.byte	120
+ 855 0022 64        		.byte	100
+ 856 0023 65        		.byte	101
+ 857 0024 34        		.byte	52
+ 858 0025 33        		.byte	51
+ 859 0026 00        		.byte	0
+ 860 0027 00        		.byte	0
+ 861 0028 20        		.byte	32
+ 862 0029 76        		.byte	118
+ 863 002a 66        		.byte	102
+ 864 002b 74        		.byte	116
+ 865 002c 72        		.byte	114
+ 866 002d 35        		.byte	53
+ 867 002e 00        		.byte	0
+ 868 002f 00        		.byte	0
+ 869 0030 6E        		.byte	110
+ 870 0031 62        		.byte	98
+ 871 0032 68        		.byte	104
+ 872 0033 67        		.byte	103
+ 873 0034 79        		.byte	121
+ 874 0035 36        		.byte	54
+ 875 0036 00        		.byte	0
+ 876 0037 00        		.byte	0
+ 877 0038 00        		.byte	0
+ 878 0039 6D        		.byte	109
+ 879 003a 6A        		.byte	106
+ 880 003b 75        		.byte	117
+ 881 003c 37        		.byte	55
+ 882 003d 38        		.byte	56
+ 883 003e 00        		.byte	0
+ 884 003f 00        		.byte	0
+ 885 0040 2C        		.byte	44
+ 886 0041 6B        		.byte	107
+ 887 0042 69        		.byte	105
+ 888 0043 6F        		.byte	111
+ 889 0044 30        		.byte	48
+ 890 0045 39        		.byte	57
+ 891 0046 00        		.byte	0
+ 892 0047 00        		.byte	0
+ 893 0048 2E        		.byte	46
+ 894 0049 2F        		.byte	47
+ 895 004a 6C        		.byte	108
+ 896 004b 3B        		.byte	59
+ 897 004c 70        		.byte	112
+ 898 004d 2D        		.byte	45
+ 899 004e 00        		.byte	0
+ 900 004f 00        		.byte	0
+ 901 0050 00        		.byte	0
+ 902 0051 27        		.byte	39
+ 903 0052 00        		.byte	0
+ 904 0053 5B        		.byte	91
+ 905 0054 3D        		.byte	61
+ 906 0055 00        		.byte	0
+ 907 0056 00        		.byte	0
+ 908 0057 00        		.byte	0
+ 909 0058 00        		.byte	0
+ 910 0059 00        		.byte	0
+ 911 005a 5D        		.byte	93
+ 912 005b 00        		.byte	0
+ 913 005c 5C        		.byte	92
+ 914 005d 00        		.byte	0
+ 915 005e 00        		.byte	0
+ 916 005f 00        		.byte	0
+ 917 0060 00        		.byte	0
+ 918 0061 00        		.byte	0
+ 919 0062 00        		.byte	0
+ 920 0063 00        		.byte	0
+ 921 0064 00        		.byte	0
+ 922 0065 00        		.byte	0
+ 923               		.text
+ 924               	.Letext0:
+ 925               		.file 3 "/usr/local/CrossPack-AVR-20131216/avr/include/stdint.h"
+ 926               		.file 4 "/usr/local/CrossPack-AVR-20131216/avr/include/stdio.h"
+ 927               		.file 5 "ps2kbd.h"
+ 928               		.file 6 "uart.h"
+ 929               		.file 7 "<built-in>"
+DEFINED SYMBOLS
+                            *ABS*:00000000 ps2kbd.c
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:2      *ABS*:0000003e __SP_H__
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:3      *ABS*:0000003d __SP_L__
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:4      *ABS*:0000003f __SREG__
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:5      *ABS*:00000000 __tmp_reg__
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:6      *ABS*:00000001 __zero_reg__
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:12     .text:00000000 calc_parity
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:65     .text:0000002e framing_error
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:751    .bss:00000000 framing_errors
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:119    .text:0000005c sendps2
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:778    .bss:00000005 scancode
+                            *COM*:00000001 send_byte
+                            *COM*:00000001 send_parity
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:763    .bss:00000002 sr
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:773    .bss:00000004 strobe
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:263    .text:000000f4 parity_error
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:756    .bss:00000001 parity_errors
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:303    .text:0000011c __vector_1
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:783    .bss:00000006 send_bitcount
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:788    .bss:00000007 rcv_bitcount
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:793    .bss:00000008 rcv_byte
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:768    .bss:00000003 ssp
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:577    .text.startup:00000000 main
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:809    .data:0000000e uart_output
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:799    .data:00000000 uart_input
+/var/folders/k_/m6drp_kj3rl_zc7vsyk4611c0000gn/T//ccb1WWCF.s:820    .rodata:00000000 ps2_toascii
+
+UNDEFINED SYMBOLS
+printf
+uart_init
+__iob
+puts
+uart_getchar
+uart_putchar
+__do_copy_data
+__do_clear_bss
