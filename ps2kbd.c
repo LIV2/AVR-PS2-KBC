@@ -130,7 +130,7 @@ ISR (INT0_vect)
 		else {
 			result = 0;
 		}
-		
+
 		if (rcv_bitcount <=9) 
 		{
 			if (rcv_bitcount >=1 && rcv_bitcount <= 8) 
@@ -176,6 +176,7 @@ ISR (INT0_vect)
 
 int main (void) {
 	volatile uint8_t kbd_curr_cmd = 0; // 0 = keyup | 1 = shift | 2 = ctrl | 3 = alt | 4 = capslock | 5 = numlock | 6 = scroll lock
+	volatile char retchar = 0;
 	DDRD &= ~(1 << DDD2 | 1 << DDD3);
 	EICRA |= (1 << ISC01);
 	EIMSK |= (1 << INT0);
@@ -189,7 +190,7 @@ int main (void) {
 	printf("Keyboard Self-test completed: 0x%x\r\n", scancode);
 	sendps2(0xf0,0); // Set Codeset 
 	sendps2(0x02,0); // Codeset 2
-	volatile	char retchar =0;
+	
 
 	while (1) {
 		if (strobe)
