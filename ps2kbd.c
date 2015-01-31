@@ -193,27 +193,6 @@ volatile	char retchar =0;
 	while (1) {
 		if (strobe)
 		{
-/*			if (scancode == 0x52 && kbd_curr_cmd == 0)
-			{
-				kbd_lights ^= 1 << 2;
-				sendps2(0xed,0);
-				sendps2(kbd_lights,0);
-			}
-			else if (scancode != 0xf0)
-			{
-				printf("Scancode: %x %x\r\n", scancode, kbd_curr_cmd);
-			}
-			if (scancode == 0xf0) {
-				kbd_curr_cmd = 1; //key_up
-			}
-			else 
-			{
-				kbd_curr_cmd = 0; //key_down
-			}
-			strobe = 0;
-*/
-
-
 			if (kbd_curr_cmd & (1 << KB_KUP)) //This is a keyup event
 			{
 				switch(scancode)
