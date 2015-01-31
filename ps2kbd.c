@@ -188,6 +188,7 @@ sendps2(0xff,1); // reset kbd
 printf("Keyboard Self-test completed: 0x%x\r\n", scancode);
 sendps2(0xf0,0); // Set Codeset 
 sendps2(0x02,0); // Codeset 2
+volatile	char retchar =0;
 
 	while (1) {
 		if (strobe)
@@ -250,6 +251,7 @@ sendps2(0x02,0); // Codeset 2
 					case 0x66: //backspace
 						break;
 					case 0x5A: //enter
+						printf("\r\n");
 						break;
 					case 0x0D: //tab
 						break;
@@ -277,7 +279,14 @@ sendps2(0x02,0); // Codeset 2
 						sendps2((kbd_curr_cmd >> 4),0); // Set KBD Lights
 						break;
 					default:
-						printf("char %c \r\n", ps2_to_ascii[scancode]);
+						retchar = ps2_to_ascii[scancode];
+						if (((kbd_curr_cmd & (1<< KB_SHIFT)) | (kbd_curr_cmd & (1 <<KB_CAPSLK))) &&  ((retchar >=0x61) && (retchar <= 0x7A))) {
+							printf("%c", (retchar - 0x20));
+						}
+						else
+						{
+							printf("%c", retchar);
+						}
 						break;
 				}				
 			}
