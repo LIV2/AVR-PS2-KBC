@@ -3,10 +3,8 @@
 #include <stdio.h>
 #include "ps2kbd.h"
 #include "uart.h"
-#ifndef F_CPU
-#define F_CPU 16000000UL
-#endif
 #include <util/delay.h>
+
 volatile uint8_t rcv_byte = 0;
 volatile uint8_t rcv_bitcount = 0;
 volatile uint8_t send_bitcount = 0;
@@ -40,13 +38,6 @@ void framing_error(uint8_t num)
 	EIMSK |= (1 << INT0);
 }
 
-void parity_error()
-{	
-	parity_errors++;
-	sendps2(0xFE,0); // Inform the KBD of the Parity error and request a resend.
-	printf("!P");
-}
-
 void sendps2(uint8_t data, uint8_t responseneeded)
 {
 /*	Complicated shit to send a PS/2 Packet.
@@ -69,7 +60,7 @@ void sendps2(uint8_t data, uint8_t responseneeded)
 		EIFR |= (1 << INTF0);
 		EIMSK |= (1 << INT0);
 		sr = 1;
-		while (sr == 1) {}
+		while (sr == 1) {} // All the work for sending the data is handled inside the interrupt
 		DDRD &= ~(1 << DDD2 | 1 << DDD3);
 		while (strobe == 0) {} // Wait for ACK packet before proceeding
 		strobe = 0;
@@ -81,6 +72,13 @@ void sendps2(uint8_t data, uint8_t responseneeded)
 		while (strobe == 0) {}
 		strobe = 0;	
 	}
+}
+
+void parity_error(void)
+{	
+	parity_errors++;
+	sendps2(0xFE,0); // Inform the KBD of the Parity error and request a resend.
+	printf("!P");
 }
 
 ISR (INT0_vect)
@@ -176,9 +174,7 @@ if (rcv_bitcount <=9)
 
 
 int main (void) {
-volatile uint8_t kbd_curr_cmd = 0;
-volatile uint8_t kbd_lights = 0;
-volatile uint8_t last_cmd = 0;
+volatile uint8_t kbd_curr_cmd = 0; // 0 = keyup | 1 = shift | 2 = ctrl | 3 = alt | 4 = capslock | 5 = numlock | 6 = scroll lock
 DDRD &= ~(1 << DDD2 | 1 << DDD3);
 EICRA |= (1 << ISC01);
 EIMSK |= (1 << INT0);
@@ -196,7 +192,7 @@ sendps2(0x02,0); // Codeset 2
 	while (1) {
 		if (strobe)
 		{
-			if (scancode == 0x52 && kbd_curr_cmd == 0)
+/*			if (scancode == 0x52 && kbd_curr_cmd == 0)
 			{
 				kbd_lights ^= 1 << 2;
 				sendps2(0xed,0);
@@ -213,6 +209,74 @@ sendps2(0x02,0); // Codeset 2
 			{
 				kbd_curr_cmd = 0; //key_down
 			}
+			strobe = 0;
+*/
+			if (kbd_curr_cmd & (1 << KB_KUP)) //This is a keyup event
+			{
+				switch(scancode)
+				{
+					case 0x12 | 0x59:
+						kbd_curr_cmd &= ~(1 << KB_SHIFT);
+						break;
+					case 0x14:
+						kbd_curr_cmd &= ~(1 << KB_CTRL);
+						break;
+					case 0x11:
+						kbd_curr_cmd &= ~(1 << KB_ALT);
+						break;
+					default:
+						break;
+				}
+				kbd_curr_cmd &= ~(1 << KB_KUP);
+
+			}
+			else 
+			{
+				switch(scancode)
+				{
+					case 0xF0: //Key up
+						kbd_curr_cmd |= (1 << KB_KUP);
+						break;
+					case 0xE0: //Extended key
+						// Do something?
+						break;
+					case 0x12 | 0x59: // Shift
+						kbd_curr_cmd |= (1 << KB_SHIFT);
+						break;
+					case 0x66: //backspace
+						break;
+					case 0x5A: //enter
+						break;
+					case 0x0D: //tab
+						break;
+					case 0x14: //ctrl
+						kbd_curr_cmd |= (1 << KB_CTRL);
+						break;
+					case 0x11: //alt
+						kbd_curr_cmd |= (1 << KB_ALT);
+						break;
+					case 0x76: //esc
+						break;
+					case 0x58: //capslock
+						kbd_curr_cmd ^= (1 << KB_CAPSLK);
+						sendps2(0xed,0);
+						sendps2((kbd_curr_cmd >> 4),0); // Set KBD Lights
+						break;
+					case 0x77: //numlock
+						kbd_curr_cmd ^= (1 << KB_NUMLK);
+						sendps2(0xed,0);
+						sendps2((kbd_curr_cmd >> 4),0); // Set KBD Lights
+						break;
+					case 0x7E: //scrllock
+						kbd_curr_cmd ^= (1 << KB_SCRLK);
+						sendps2(0xed,0);
+						sendps2((kbd_curr_cmd >> 4),0); // Set KBD Lights
+						break;
+					default:
+						break;
+				}				
+			}
+		
 			strobe = 0;
 		}
 	}
