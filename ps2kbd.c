@@ -233,13 +233,13 @@ int main (void) {
 						kb_register |= (1 << KB_SHIFT);
 						break;
 					case 0x66: //backspace
-						ret_char = '\b';
+						ret_char = 0x7F;
 						break;
 					case 0x5A: //enter
-						ret_char = '\r';
+						ret_char = 0x0D;
 						break;
 					case 0x0D: //tab
-						ret_char = '\t';
+						ret_char = 0x09;
 						break;
 					case 0x14: //ctrl
 						kb_register |= (1 << KB_CTRL);
@@ -248,7 +248,7 @@ int main (void) {
 						kb_register |= (1 << KB_ALT);
 						break;
 					case 0x76: //esc
-						ret_char = '\e';
+						ret_char = 0x1B;
 						break;
 					case 0x58: //capslock
 						kb_register ^= (1 << KB_CAPSLK);
@@ -268,7 +268,15 @@ int main (void) {
 					default: // Fall through for Alphanumeric Characters
 						if (kb_register & (1 << KB_CTRL)) // ASCII Control Code 
 						{
-							ret_char = (ps2_to_ascii_shifted[scancode] - 0x40); // Send Ascii control code, i.e CTRL+g = Ascii Bell 0x07 
+							ret_char = ps2_to_ascii_shifted[scancode];  
+							if ((ret_char >=0x41) && (ret_char <= 0x5A)) //Make sure we don't read outside the valid range of codes
+							{
+								ret_char = ret_char - 0x40;
+							}
+							else 
+							{
+								ret_char = 0;
+							}
 						}
 						else if ((kb_register & (1<< KB_SHIFT)) | (kb_register & (1 <<KB_CAPSLK))) {
 							ret_char = ps2_to_ascii_shifted[scancode]; 
