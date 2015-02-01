@@ -278,14 +278,12 @@ int main (void) {
 							ret_char = ps2_to_ascii[scancode];
 						}
 						break;
-
-
-					if (ret_char)
-					{
-						printf("%c", ret_char);
-						ret_char = 0;
-					}
 				}				
+				if (ret_char)
+				{
+					printf("%c", ret_char);
+					ret_char = 0;
+				}
 			}
 			strobe = 0;
 		}
