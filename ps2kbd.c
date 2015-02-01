@@ -53,18 +53,18 @@ void sendps2(uint8_t data, uint8_t responseneeded)
 	{
 		send_byte = data;
 		send_parity = calc_parity(send_byte);
-		EIMSK &= ~(1 << INT0);
-		DDRD |= (1 << DDD2 | 1 << DDD3);
-		PORTD &= ~(1 << PD2);
+		EIMSK &= ~(1 << INT0); // Disable interrupt for CLK
+		DDRD |= (1 << DDD2 | 1 << DDD3); // CLK/Data are now Outputs
+		PORTD &= ~(1 << PD2); // Bring Clock low
 		_delay_us(200);
-		PORTD &= ~(1 << PD3);
-		PORTD |= (1 << PD2);
+		PORTD &= ~(1 << PD3); // Bring data Low
+		PORTD |= (1 << PD2); // Release clock and set it as an input again, clear interrupt flags and re-enable the intterupts
 		DDRD &= ~(1 << DDD2);
 		EIFR |= (1 << INTF0);
 		EIMSK |= (1 << INT0);
 		sr = 1;
 		while (sr == 1) {} // All the work for sending the data is handled inside the interrupt
-		DDRD &= ~(1 << DDD2 | 1 << DDD3);
+		DDRD &= ~(1 << DDD2 | 1 << DDD3); // Clock and Data set back to input
 		while (strobe == 0) {} // Wait for ACK packet before proceeding
 		strobe = 0;
 		send_tries--;
@@ -87,7 +87,7 @@ void parity_error(void)
 ISR (INT0_vect)
 {
 	if (sr == 1) { //Send bytes to device.
-		if (send_bitcount >=0 && send_bitcount <=7)
+		if (send_bitcount >=0 && send_bitcount <=7) // Data Byte
 		{
 			if ((send_byte >> send_bitcount) & 1) {
 				PORTD |= (1 << PD3);
@@ -97,7 +97,7 @@ ISR (INT0_vect)
 				PORTD &= ~(1 << PD3);
 			}
 		}
-		else if (send_bitcount == 8)
+		else if (send_bitcount == 8) // Parity Bit
 		{	
 			if (send_parity)
 			{
@@ -108,7 +108,7 @@ ISR (INT0_vect)
 				PORTD |= (1 << PD3);
 			}
 		}
-		else if (send_bitcount == 9)
+		else if (send_bitcount == 9) // Stop Bit
 		{
 			PORTD |= (1 << PD3);
 		}
@@ -138,7 +138,7 @@ ISR (INT0_vect)
 		{
 			if (rcv_bitcount >=1 && rcv_bitcount <= 8) 
 			{
-				rcv_byte |= (result << (rcv_bitcount - 1));
+				rcv_byte |= (result << (rcv_bitcount - 1)); //Scancode Byte
 			}
 			else if (rcv_bitcount == 0)
 			{
@@ -180,9 +180,9 @@ ISR (INT0_vect)
 int main (void) {
 	volatile uint8_t kb_register = 0; // 0 = keyup | 1 = shift | 2 = ctrl | 3 = alt | 4 = capslock | 5 = numlock | 6 = scroll lock
 	volatile char ret_char = 0;
-	DDRD &= ~(1 << DDD2 | 1 << DDD3);
-	EICRA |= (1 << ISC01);
-	EIMSK |= (1 << INT0);
+	DDRD &= ~(1 << DDD2 | 1 << DDD3); // PIND2 = PS/2 Clock, PIND3 = PS/2 Data both set as input
+	EICRA |= (1 << ISC01);	// Interrupt on Falling Edge
+	EIMSK |= (1 << INT0); // Enable Interrupt on PIND2 aka INT0
 	uart_init();
 	stdout = &uart_output;
 	stdin  = &uart_input;
@@ -225,7 +225,7 @@ int main (void) {
 					case 0xF0: //Key up
 						kb_register |= (1 << KB_KUP);
 						break;
-					case 0xE0: //Extended key
+					case 0xE0: //Extended key sequence
 						kb_register |= (1 << KB_EXT);
 						break;
 					case 0x12:
