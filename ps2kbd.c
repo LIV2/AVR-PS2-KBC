@@ -292,7 +292,7 @@ int main (void) {
 				if (ret_char)
 				{
 					printf("%c", ret_char);
-					PORTC = (ret_char & 0x7F);
+					PORTC = (ret_char & 0x3F);
 					PORTB = ((ret_char >> 6) & 0x03);
 					ret_char = 0;
 				}
