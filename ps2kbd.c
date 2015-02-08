@@ -181,6 +181,8 @@ int main (void) {
 	volatile uint8_t kb_register = 0; // 0 = keyup | 1 = shift | 2 = ctrl | 3 = alt | 4 = capslock | 5 = numlock | 6 = scroll lock
 	volatile char ret_char = 0;
 	DDRD &= ~(1 << DDD2 | 1 << DDD3); // PIND2 = PS/2 Clock, PIND3 = PS/2 Data both set as input
+	DDRC |= (0x3F)
+	DDRB |= (1 << DDB0 | 1 << DDB1)
 	EICRA |= (1 << ISC01);	// Interrupt on Falling Edge
 	EIMSK |= (1 << INT0); // Enable Interrupt on PIND2 aka INT0
 	uart_init();
@@ -289,7 +291,9 @@ int main (void) {
 				}				
 				if (ret_char)
 				{
-					printf("%c", ret_char);
+					//printf("%c", ret_char);
+					PORTC = (ret_char & 0x7F);
+					PORTB = ((ret_char >> 6) & 0x03);
 					ret_char = 0;
 				}
 			}
