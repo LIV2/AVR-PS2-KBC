@@ -1,8 +1,6 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <stdio.h>
 #include "ps2kbd.h"
-#include "uart.h"
 #include <util/delay.h>
 
 
@@ -33,12 +31,11 @@ int calc_parity(unsigned parity_x)
 void framing_error(uint8_t num)
 {
 	// Deal with PS/2 Protocol Framing errors. delay for the rest of the packet and clear interrupts generated during the delay.						
-	printf("!F");
 	framing_errors++;
-	EIMSK &= ~(1 << INT0);
+	GIMSK &= ~(1 << INT0);
 	_delay_ms(8);
-	EIFR |= (1 << INTF0);	 // Clear Interrupt flag
-	EIMSK |= (1 << INT0);
+	GIFR |= (1 << INTF0);	 // Clear Interrupt flag
+	GIMSK |= (1 << INT0);
 }
 
 void sendps2(uint8_t data, uint8_t responseneeded)
@@ -53,18 +50,18 @@ void sendps2(uint8_t data, uint8_t responseneeded)
 	{
 		send_byte = data;
 		send_parity = calc_parity(send_byte);
-		EIMSK &= ~(1 << INT0); // Disable interrupt for CLK
-		DDRD |= (1 << DDD2 | 1 << DDD3); // CLK/Data are now Outputs
-		PORTD &= ~(1 << PD2); // Bring Clock low
+		GIMSK &= ~(1 << INT0); // Disable interrupt for CLK
+		DDRB |= (1 << DDB6 | 1 << DDB5); // CLK/Data are now Outputs
+		PORTB &= ~(1 << PB6); // Bring Clock low
 		_delay_us(200);
-		PORTD &= ~(1 << PD3); // Bring data Low
-		PORTD |= (1 << PD2); // Release clock and set it as an input again, clear interrupt flags and re-enable the intterupts
-		DDRD &= ~(1 << DDD2);
-		EIFR |= (1 << INTF0);
-		EIMSK |= (1 << INT0);
+		PORTB &= ~(1 << PB5); // Bring data Low
+		PORTB |= (1 << PB6); // Release clock and set it as an input again, clear interrupt flags and re-enable the intterupts
+		DDRB &= ~(1 << DDB5);
+		GIFR |= (1 << INTF0);
+		GIMSK |= (1 << INT0);
 		sr = 1;
 		while (sr == 1) {} // All the work for sending the data is handled inside the interrupt
-		DDRD &= ~(1 << DDD2 | 1 << DDD3); // Clock and Data set back to input
+		DDRB &= ~(1 << DDB6 | 1 << DDB5); // Clock and Data set back to input
 		while (strobe == 0) {} // Wait for ACK packet before proceeding
 		strobe = 0;
 		send_tries--;
@@ -81,7 +78,6 @@ void parity_error(void)
 {	
 	parity_errors++;
 	sendps2(0xFE,0); // Inform the KBD of the Parity error and request a resend.
-	printf("!P");
 }
 
 ISR (INT0_vect)
@@ -90,27 +86,27 @@ ISR (INT0_vect)
 		if (send_bitcount >=0 && send_bitcount <=7) // Data Byte
 		{
 			if ((send_byte >> send_bitcount) & 1) {
-				PORTD |= (1 << PD3);
+				PORTB |= (1 << PB5);
 			}
 			else
 			{
-				PORTD &= ~(1 << PD3);
+				PORTB &= ~(1 << PB5);
 			}
 		}
 		else if (send_bitcount == 8) // Parity Bit
 		{	
 			if (send_parity)
 			{
-				PORTD &= ~(1 << PD3);
+				PORTB &= ~(1 << PB5);
 			}
 			else
 			{
-				PORTD |= (1 << PD3);
+				PORTB |= (1 << PB5);
 			}
 		}
 		else if (send_bitcount == 9) // Stop Bit
 		{
-			PORTD |= (1 << PD3);
+			PORTB |= (1 << PB5);
 		}
 		if (send_bitcount < 10)
 		{
@@ -126,7 +122,7 @@ ISR (INT0_vect)
 	else { // Receive from device
 	uint8_t result = 0;
 
-		if (PIND & (1 << PD3)) 
+		if (PINB & (1 << PB5)) 
 		{
 			result = 1;
 		}
@@ -180,19 +176,16 @@ ISR (INT0_vect)
 int main (void) {
 	volatile uint8_t kb_register = 0; // 0 = keyup | 1 = shift | 2 = ctrl | 3 = alt | 4 = capslock | 5 = numlock | 6 = scroll lock
 	volatile char ret_char = 0;
-	DDRD &= ~(1 << DDD2 | 1 << DDD3); // PIND2 = PS/2 Clock, PIND3 = PS/2 Data both set as input
-	DDRC |= (0x3F);
-	DDRB |= (1 << DDB0 | 1 << DDB1);
+	DDRB &= ~(1 << DDB6 | 1 << DDB5); // PINB6 = PS/2 Clock, PINB5 = PS/2 Data both set as input
+	DDRA |= (0xFF);
 	EICRA |= (1 << ISC01);	// Interrupt on Falling Edge
-	EIMSK |= (1 << INT0); // Enable Interrupt on PIND2 aka INT0
+	GIMSK |= (1 << INT0); // Enable Interrupt on PINB2 aka INT0
 	uart_init();
 	stdout = &uart_output;
 	stdin  = &uart_input;
-	printf("Startup Completed. \r\n");
 
 	sei();
 	sendps2(0xff,1); // reset kbd
-	printf("Keyboard Self-test completed: 0x%x\r\n", scancode);
 	sendps2(0xf0,0); // Set Codeset 
 	sendps2(0x02,0); // Codeset 2
 	
@@ -291,9 +284,7 @@ int main (void) {
 				}				
 				if (ret_char)
 				{
-					printf("%c", ret_char);
-					PORTC = (ret_char & 0x3F);
-					PORTB = ((ret_char >> 6) & 0x03);
+					PORTA = ret_char;
 					ret_char = 0;
 				}
 			}

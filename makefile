@@ -14,7 +14,7 @@
 # To rebuild project do "make clean" then "make all".
 
 # Microcontroller Type
-MCU=atmega328p
+MCU=attiny861
 
 # Target file name (without extension).
 TARGET = ps2kbd

@@ -9,7 +9,7 @@
 
 
 #ifndef F_CPU
-#define F_CPU 16000000UL
+#define F_CPU 8000000UL
 #endif
 
 const uint8_t ps2_to_ascii[] = // Scancode > Ascii table.
