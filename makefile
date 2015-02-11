@@ -20,7 +20,7 @@ MCU=attiny861
 TARGET = ps2kbd
 
 # Programming hardware: type `avrdude -c ?` to get a full listing.
-AVRDUDE_PROGRAMMER = arduino
+AVRDUDE_PROGRAMMER = stk500v1
 
 # Port to which the programmer is connected
 AVRDUDE_PORT = /dev/tty.usbmodem1411
@@ -35,7 +35,7 @@ OPT = s
 FORMAT = ihex
 
 # List C source files here. (C dependencies are automatically generated.)
-SRC = $(TARGET).c uart.c
+SRC = $(TARGET).c
 
 # If there is more than one source file, append them above, or modify and
 # uncomment the following:
@@ -127,7 +127,7 @@ AVRDUDE_FLAGS = -p $(MCU) -P $(AVRDUDE_PORT) -c $(AVRDUDE_PROGRAMMER)
 
 # Uncomment the following if you are using arduino (or any other programmer
 # that needs custom baud rate) as a programmer.
-#AVRDUDE_FLAGS += -b 19200
+AVRDUDE_FLAGS += -b 19200
 
 # Uncomment the following if you want avrdude's erase cycle counter.
 # Note that this counter needs to be initialized first using -Yn,

@@ -56,7 +56,7 @@ void sendps2(uint8_t data, uint8_t responseneeded)
 		_delay_us(200);
 		PORTB &= ~(1 << PB5); // Bring data Low
 		PORTB |= (1 << PB6); // Release clock and set it as an input again, clear interrupt flags and re-enable the intterupts
-		DDRB &= ~(1 << DDB5);
+		DDRB &= ~(1 << DDB6);
 		GIFR |= (1 << INTF0);
 		GIMSK |= (1 << INT0);
 		sr = 1;
@@ -178,7 +178,7 @@ int main (void) {
 	volatile char ret_char = 0;
 	DDRB &= ~(1 << DDB6 | 1 << DDB5); // PINB6 = PS/2 Clock, PINB5 = PS/2 Data both set as input
 	DDRA |= (0xFF);
-	MCUCR |= (1 << ISC01);	// Interrupt on Falling Edge
+	MCUCR |= (1 << ISC01 | 1 << PUD);	// Interrupt on Falling Edge
 	GIMSK |= (1 << INT0); // Enable Interrupt on PINB2 aka INT0
 
 	sei();
