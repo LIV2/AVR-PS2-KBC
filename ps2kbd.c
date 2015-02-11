@@ -180,9 +180,6 @@ int main (void) {
 	DDRA |= (0xFF);
 	EICRA |= (1 << ISC01);	// Interrupt on Falling Edge
 	GIMSK |= (1 << INT0); // Enable Interrupt on PINB2 aka INT0
-	uart_init();
-	stdout = &uart_output;
-	stdin  = &uart_input;
 
 	sei();
 	sendps2(0xff,1); // reset kbd
