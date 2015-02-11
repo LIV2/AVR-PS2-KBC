@@ -178,7 +178,7 @@ int main (void) {
 	volatile char ret_char = 0;
 	DDRB &= ~(1 << DDB6 | 1 << DDB5); // PINB6 = PS/2 Clock, PINB5 = PS/2 Data both set as input
 	DDRA |= (0xFF);
-	EICRA |= (1 << ISC01);	// Interrupt on Falling Edge
+	MCUCR |= (1 << ISC01);	// Interrupt on Falling Edge
 	GIMSK |= (1 << INT0); // Enable Interrupt on PINB2 aka INT0
 
 	sei();
