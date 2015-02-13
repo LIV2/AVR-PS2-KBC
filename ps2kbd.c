@@ -132,7 +132,7 @@ ISR (INT0_vect)
 
 		if (rcv_bitcount <=9) 
 		{
-			if (rcv_bitcount >=1 && rcv_bitcount <= 8) 
+			if (rcv_bitcount >=0 && rcv_bitcount <= 8) 
 			{
 				rcv_byte |= (result << (rcv_bitcount - 1)); //Scancode Byte
 			}
@@ -178,7 +178,7 @@ int main (void) {
 	volatile char ret_char = 0;
 	DDRB &= ~(1 << DDB6 | 1 << DDB5); // PINB6 = PS/2 Clock, PINB5 = PS/2 Data both set as input
 	DDRA |= (0xFF);
-	MCUCR |= (1 << ISC01 | 1 << PUD);	// Interrupt on Falling Edge
+	MCUCR |= (1 << ISC01 | 1 << PUD);	// Interrupt on Falling Edge, force disable pullups
 	GIMSK |= (1 << INT0); // Enable Interrupt on PINB2 aka INT0
 
 	sei();
