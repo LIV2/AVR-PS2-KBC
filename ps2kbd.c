@@ -132,7 +132,7 @@ ISR (INT0_vect)
 
 		if (rcv_bitcount <=9) 
 		{
-			if (rcv_bitcount >=0 && rcv_bitcount <= 8) 
+			if (rcv_bitcount >=0t && rcv_bitcount <= 8) 
 			{
 				rcv_byte |= (result << (rcv_bitcount - 1)); //Scancode Byte
 			}
