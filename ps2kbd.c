@@ -132,7 +132,7 @@ ISR (INT0_vect)
 
 		if (rcv_bitcount <=9) 
 		{
-			if (rcv_bitcount >=0 && rcv_bitcount <= 8) 
+			if (rcv_bitcount >=1 && rcv_bitcount <= 8) 
 			{
 				rcv_byte |= (result << (rcv_bitcount - 1)); //Scancode Byte
 			}
@@ -282,6 +282,8 @@ int main (void) {
 				if (ret_char)
 				{
 					PORTA = ret_char;
+					PORTB |= 1 << PB3;
+					PORTB &= ~(1 << PB3);
 					ret_char = 0;
 				}
 			}
