@@ -177,6 +177,7 @@ int main (void) {
 	volatile uint8_t kb_register = 0; // 0 = keyup | 1 = shift | 2 = ctrl | 3 = alt | 4 = capslock | 5 = numlock | 6 = scroll lock
 	volatile char ret_char = 0;
 	DDRB &= ~(1 << DDB6 | 1 << DDB5); // PINB6 = PS/2 Clock, PINB5 = PS/2 Data both set as input
+	DDRB |= (1 << DDB3);
 	DDRA |= (0xFF);
 	MCUCR |= (1 << ISC01 | 1 << PUD);	// Interrupt on Falling Edge, force disable pullups
 	GIMSK |= (1 << INT0); // Enable Interrupt on PINB2 aka INT0
@@ -283,8 +284,10 @@ int main (void) {
 				{
 					PORTA = ret_char;
 					PORTB |= 1 << PB3;
+					_delay_us(1000);
 					PORTB &= ~(1 << PB3);
 					ret_char = 0;
+					PORTA = 0;
 				}
 			}
 			strobe = 0;
