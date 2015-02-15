@@ -132,7 +132,7 @@ ISR (INT0_vect)
 
 		if (rcv_bitcount <=9) 
 		{
-			if (rcv_bitcount >=0t && rcv_bitcount <= 8) 
+			if (rcv_bitcount >=0 && rcv_bitcount <= 8) 
 			{
 				rcv_byte |= (result << (rcv_bitcount - 1)); //Scancode Byte
 			}
@@ -174,7 +174,7 @@ ISR (INT0_vect)
 
 
 int main (void) {
-	volatile uint8_t kb_register = 0; // Bit 0 = keyup | Bit 1 = shift | Bit 2 = ctrl |  Bit 3 = alt | Bit 4 = capslock | Bit 5 = numlock | Bit 6 = scroll lock
+	volatile uint8_t kb_register = 0; // 0 = keyup | 1 = shift | 2 = ctrl | 3 = alt | 4 = capslock | 5 = numlock | 6 = scroll lock
 	volatile char ret_char = 0;
 	DDRB &= ~(1 << DDB6 | 1 << DDB5); // PINB6 = PS/2 Clock, PINB5 = PS/2 Data both set as input
 	DDRA |= (0xFF);
