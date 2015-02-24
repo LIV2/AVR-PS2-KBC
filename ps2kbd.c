@@ -264,16 +264,22 @@ int main (void) {
 							ret_char = ps2_to_ascii_shifted[scancode];  
 							if ((ret_char >=0x41) && (ret_char <= 0x5A)) //Make sure we don't read outside the valid range of codes
 							{
-								ret_char = ret_char - 0x40;
+								ret_char ^= 0x40;
 							}
 							else 
 							{
 								ret_char = 0;
 							}
 						}
-						else if ((kb_register & (1<< KB_SHIFT)) | (kb_register & (1 <<KB_CAPSLK))) {
+						else if (kb_register & (1<< KB_SHIFT)) {
 							ret_char = ps2_to_ascii_shifted[scancode]; 
 						}
+						else if (kb_register & (1 <<KB_CAPSLK))
+							ret_char = ps2_to_ascii[scancode];
+							if ((ret_char >= 0x61) && (ret_char <= 0x7A))
+							{
+								ret_char ^=	0x20;
+							}
 						else
 						{
 							ret_char = ps2_to_ascii[scancode];
