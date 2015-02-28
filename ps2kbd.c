@@ -53,7 +53,7 @@ void sendps2(uint8_t data, uint8_t responseneeded)
 		GIMSK &= ~(1 << INT0); // Disable interrupt for CLK
 		DDRB |= (1 << DDB6 | 1 << DDB5); // CLK/Data are now Outputs
 		PORTB &= ~(1 << PB6); // Bring Clock low
-		_delay_us(200);
+		_delay_us(150);
 		PORTB &= ~(1 << PB5); // Bring data Low
 		PORTB |= (1 << PB6); // Release clock and set it as an input again, clear interrupt flags and re-enable the intterupts
 		DDRB &= ~(1 << DDB6);
@@ -191,6 +191,9 @@ int main (void) {
 	while (1) {
 		if (strobe)
 		{
+			GIMSK &= ~(1 << INT0); // Disable interrupt for CLK
+			DDRB |= (1 << DDB6); // CLK now an outout
+			PORTB &= ~(1 << PB6); // Bring Clock low, inhibit keyboard until done processing event
 			if (kb_register & (1 << KB_KUP)) //This is a keyup event
 			{
 				switch(scancode)
@@ -291,13 +294,17 @@ int main (void) {
 				{
 					PORTA = ret_char;
 					PORTB |= 1 << PB3;
-					_delay_us(1000);
+					_delay_us(10);
 					PORTB &= ~(1 << PB3);
 					ret_char = 0;
 					PORTA = 0;
 				}
 			}
 			strobe = 0;
+			PORTB |= (1 << PB6); // Release clock and set it as an input again, clear interrupt flags and re-enable the interupts
+			DDRB &= ~(1 << DDB6);
+			GIFR |= (1 << INTF0);
+			GIMSK |= (1 << INT0);
 		}
 	}
 }
