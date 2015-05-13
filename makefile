@@ -20,10 +20,10 @@ MCU=attiny861
 TARGET = ps2kbd
 
 # Programming hardware: type `avrdude -c ?` to get a full listing.
-AVRDUDE_PROGRAMMER = stk500v1
+AVRDUDE_PROGRAMMER = usbasp
 
 # Port to which the programmer is connected
-AVRDUDE_PORT = /dev/tty.usbmodem1411
+#AVRDUDE_PORT = /dev/tty.usbmodem1411
 
 ############# Don't need to change below here for most purposes  (Elliot)
 
@@ -123,11 +123,11 @@ LDFLAGS += -lm
 AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
 #AVRDUDE_WRITE_EEPROM = -U eeprom:w:$(TARGET).eep
 
-AVRDUDE_FLAGS = -p $(MCU) -P $(AVRDUDE_PORT) -c $(AVRDUDE_PROGRAMMER) 
-
+#AVRDUDE_FLAGS = -p $(MCU) -P $(AVRDUDE_PORT) -c $(AVRDUDE_PROGRAMMER) 
+AVRDUDE_FLAGS = -p $(MCU) -c $(AVRDUDE_PROGRAMMER)
 # Uncomment the following if you are using arduino (or any other programmer
 # that needs custom baud rate) as a programmer.
-AVRDUDE_FLAGS += -b 19200
+#AVRDUDE_FLAGS += -b 19200
 
 # Uncomment the following if you want avrdude's erase cycle counter.
 # Note that this counter needs to be initialized first using -Yn,
