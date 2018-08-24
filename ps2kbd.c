@@ -34,6 +34,8 @@ volatile uint8_t send_parity = 0;
 volatile uint8_t send_byte = 0;
 volatile uint8_t parity_errors = 0; // Currently unused but will provide error info to host computer
 volatile uint8_t framing_errors = 0;
+volatile uint8_t fsm_state = 0;
+volatile uint8_t host_cmd = 0;
 
 
 int calc_parity(unsigned parity_x)
@@ -54,6 +56,21 @@ void framing_error(uint8_t num)
   _delay_ms(8);
   GIFR |= (1 << INTF0); // Clear Interrupt flag
   GIMSK |= (1 << INT0);
+}
+
+void inhibit_kbd()
+{
+      GIMSK &= ~(1 << INT0); // Disable interrupt for CLK
+      DDRB |= (1 << DDB6); // CLK now an outout
+      PORTB &= ~(1 << PB6); // Bring Clock low, inhibit keyboard until done processing event
+}
+
+void disinhibit_kbd()
+{
+      PORTB |= (1 << PB6); // Release clock and set it as an input again, clear interrupt flags and re-enable the interupts
+      DDRB &= ~(1 << DDB6);
+      GIFR |= (1 << INTF0);
+      GIMSK |= (1 << INT0);
 }
 
 void sendps2(uint8_t data, uint8_t responseneeded)
@@ -96,6 +113,53 @@ void parity_error(void)
 {
   parity_errors++;
   sendps2(0xFE,0); // Inform the KBD of the Parity error and request a resend.
+}
+
+ISR (PCINT_vect)
+{
+  if PINB & (1 << PB4) // Pin went high?
+  {
+    if fsm_state == 0 {
+      inhibit_kbd();
+       // Handshake by sending 0xAA to the host to notify we are about to wait for a command
+      PORTA = 0x4F;
+      PORTB |= 1 << PB3;
+      _delay_us(10);
+      PORTB &= ~(1 << PB3);
+      DDRA = 0x00; // PORTA is now an input   
+      fsm_state++;
+    }
+    else if fsm_state == 1 {
+      host_cmd = PORTA;
+      PORTB |= 1 << PB3;
+      _delay_us(10);
+      PORTB &= ~(1 << PB3);
+      fsm_state = 0;
+      sendps2(0xED,0);
+      sendps2(host_cmd,0);
+      DDRA = 0xFF;
+      disinhibit_kbd()
+    }
+/*      if host_cmd == 1 {
+        fsm_state++
+      } else {
+        fsm_state = 3
+      }
+    }
+    else if fsm_state =< 3 {
+      host_cmd = PORTA;
+      PORTB |= 1 << PB3;
+      _delay_us(10);
+      PORTB &= ~(1 << PB3);
+      sendps2(host_cmd,0);
+      fsm_state++
+    }
+    else {
+      fsm_state = 0;
+      DDRA = 0xFF;
+      disinhibit_kbd;
+    }*/
+  }
 }
 
 ISR (INT0_vect)
@@ -194,11 +258,12 @@ ISR (INT0_vect)
 int main (void) {
   volatile uint8_t kb_register = 0; // 0 = keyup | 1 = shift | 2 = ctrl | 3 = alt | 4 = capslock | 5 = numlock | 6 = scroll lock
   volatile char ret_char = 0;
-  DDRB &= ~(1 << DDB6 | 1 << DDB5); // PINB6 = PS/2 Clock, PINB5 = PS/2 Data both set as input
+  DDRB &= ~(1 << DDB6 | 1 << DDB5 | 1 << DDB4); // PINB6 = PS/2 Clock, PINB5 = PS/2 Data both set as input, PINB4 = Host Handshake
   DDRB |= (1 << DDB3);
   DDRA |= (0xFF);
   MCUCR |= (1 << ISC01 | 1 << PUD); // Interrupt on Falling Edge, force disable pullups
-  GIMSK |= (1 << INT0); // Enable Interrupt on PINB2 aka INT0
+  PCMSK1 |= ( << PCINT12); // Add PB4 to Pin-change interrupt 1 mask
+  GIMSK |= (1 << INT0 | 1 << PCINE1); // Enable Interrupt on PINB2 aka INT0 or Pin change interrupt 1
 
   sei();
   sendps2(0xff,1); // reset kbd
@@ -209,9 +274,7 @@ int main (void) {
   while (1) {
     if (strobe)
     {
-      GIMSK &= ~(1 << INT0); // Disable interrupt for CLK
-      DDRB |= (1 << DDB6); // CLK now an outout
-      PORTB &= ~(1 << PB6); // Bring Clock low, inhibit keyboard until done processing event
+      inhibit_kbd();
       if (kb_register & (1 << KB_KUP)) //This is a keyup event
       {
         switch(scancode)
@@ -319,10 +382,7 @@ int main (void) {
         }
       }
       strobe = 0;
-      PORTB |= (1 << PB6); // Release clock and set it as an input again, clear interrupt flags and re-enable the interupts
-      DDRB &= ~(1 << DDB6);
-      GIFR |= (1 << INTF0);
-      GIMSK |= (1 << INT0);
+      disinhibit_kbd();
     }
   }
 }
