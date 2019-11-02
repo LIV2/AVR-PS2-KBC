@@ -120,7 +120,7 @@ LDFLAGS += -lm
 # Programming support using avrdude. Settings and variables.
 
 
-AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex
+AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET).hex lfuse:w:0xd2:m -U hfuse:w:0xdb:m -U efuse:w:0xff:m
 #AVRDUDE_WRITE_EEPROM = -U eeprom:w:$(TARGET).eep
 
 #AVRDUDE_FLAGS = -p $(MCU) -P $(AVRDUDE_PORT) -c $(AVRDUDE_PROGRAMMER) 

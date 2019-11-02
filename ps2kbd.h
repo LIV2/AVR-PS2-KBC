@@ -16,19 +16,39 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
-#define KB_KUP  0
-#define KB_SHIFT  1
-#define KB_CTRL  2
-#define KB_ALT  3
-#define KB_CAPSLK 4
-#define KB_NUMLK 5
-#define KB_SCRLK 6
-#define KB_EXT 7
+#define KB_KUP     0
+#define KB_L_SHIFT 1
+#define KB_L_CTRL  2
+#define KB_L_ALT   3
+#define KB_R_SHIFT 4
+#define KB_R_CTRL  5
+#define KB_R_ALT   6
+
+#define KB_SCRLK 0
+#define KB_NUMLK 1
+#define KB_CAPSLK 2
 
 
 #ifndef F_CPU
 #define F_CPU 8000000UL
 #endif
+
+enum ps2state {
+    KEY,
+    EXTKEY,
+    PAUSE,
+    COMMAND,
+};
+
+enum bufstate {
+    FULL,
+    EMPTY
+};
+
+enum rxtxstate {
+    TX,
+    RX
+};
 
 const uint8_t ps2_to_ascii[] = // Scancode > Ascii table.
 {
