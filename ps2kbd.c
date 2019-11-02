@@ -228,8 +228,9 @@ int main (void) {
   while (1) {
     wdt_reset();
     if ((kb_register & (1 << KB_L_CTRL)) && (kb_register & (1 << KB_L_ALT)) && (kb_register & (1 << KB_R_ALT))) {
-      for (;;) {
-        resetHost();
+      resetHost();
+      while (1) {
+        // Reset KBC using the WDT
       }
     }
     if ((buffer == FULL) && ((mode == KEY) || (mode == EXTKEY)))
