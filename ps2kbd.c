@@ -69,13 +69,12 @@ void sendps2(uint8_t data)
     send_byte = data;
     send_parity = calc_parity(send_byte);
     GIMSK &= ~(1 << INT0); // Disable interrupt for CLK
-    PORTB |= (1 << PB5); // Data High
-    DDRB |= (1 << DDB6 | 1 << DDB5); // CLK/Data are now Outputs
-    PORTB &= ~(1 << PB6); // Bring Clock low
+    PORTB &= ~(1 << PB5); // Set data Low
+    PORTB &= ~(1 << PB6); // Set Clock low
+    DDRB |= (1 << DDB6); // CLK low
     _delay_us(150);
-    PORTB &= ~(1 << PB5); // Bring data Low
-    PORTB |= (1 << PB6); // Release clock and set it as an input again, clear interrupt flags and re-enable the intterupts
-    DDRB &= ~(1 << DDB6);
+    DDRB |= (1 << DDB5); // DATA low
+    DDRB &= ~(1 << DDB6); // Release clock and set it as an input again, clear interrupt flags and re-enable the interrupts
     GIFR |= (1 << INTF0);
     GIMSK |= (1 << INT0);
     sr = TX;
@@ -86,6 +85,7 @@ void sendps2(uint8_t data)
     buffer = EMPTY;
     send_tries--;
   } while ((send_tries) && (scancode != 0xFA)); // If the response is not an ack, resend up to 3 times.
+  _delay_us(150);
 }
 
 int getresponse(void) {
@@ -124,27 +124,27 @@ ISR (INT0_vect)
     if (send_bitcount >=0 && send_bitcount <=7) // Data Byte
     {
       if ((send_byte >> send_bitcount) & 1) {
-        PORTB |= (1 << PB5);
+        DDRB &= ~(1 << DDB5); // DATA High
       }
       else
       {
-        PORTB &= ~(1 << PB5);
+        DDRB |= (1 << DDB5); // DATA Low
       }
     }
     else if (send_bitcount == 8) // Parity Bit
     {   
       if (send_parity)
       {
-        PORTB &= ~(1 << PB5);
+        DDRB |= (1 << DDB5); // DATA Low
       }
       else
       {
-        PORTB |= (1 << PB5);
+        DDRB &= ~(1 << DDB5); // DATA High
       }
     }
     else if (send_bitcount == 9) // Stop Bit
     {
-      PORTB |= (1 << PB5);
+      DDRB &= ~(1 << DDB5); // DATA High
     }
     if (send_bitcount < 10)
     {
@@ -184,7 +184,7 @@ ISR (INT0_vect)
       }
       rcv_bitcount++;
     }
-    else if (rcv_bitcount >= 10)
+    else if (rcv_bitcount == 10)
     {
       ssp |= (result << 1); // Stop Bit
       if ((ssp & 0x2) != 0x02) // Check start and stop bits.
@@ -388,7 +388,6 @@ int main (void) {
         }
       }
       buffer = EMPTY;
-      PORTB |= (1 << PB6); // Release clock and set it as an input again, clear interrupt flags and re-enable the interupts
       DDRB &= ~(1 << DDB6);
       GIFR |= (1 << INTF0);
       GIMSK |= (1 << INT0);
